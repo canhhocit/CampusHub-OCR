@@ -1025,8 +1025,21 @@ body {
 }
 
 .motion-arrow {
-    font-size: 20px;
-    animation: bounce-arrow 1s infinite alternate;
+    font-size: 22px;
+    display: inline-block;
+    transition: transform 0.2s ease;
+}
+
+.motion-arrow.arrow-left {
+    animation: bounce-arrow-left 0.8s infinite alternate ease-in-out;
+}
+
+.motion-arrow.arrow-right {
+    animation: bounce-arrow-right 0.8s infinite alternate ease-in-out;
+}
+
+.motion-arrow.arrow-down {
+    animation: bounce-arrow-down 0.8s infinite alternate ease-in-out;
 }
 
 .motion-label {
@@ -1035,9 +1048,19 @@ body {
     letter-spacing: 0.3px;
 }
 
-@keyframes bounce-arrow {
-    0% { transform: translateX(-4px); }
-    100% { transform: translateX(6px); }
+@keyframes bounce-arrow-left {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-8px); }
+}
+
+@keyframes bounce-arrow-right {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(8px); }
+}
+
+@keyframes bounce-arrow-down {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(6px); }
 }
 
 /* Inactive Placeholder */

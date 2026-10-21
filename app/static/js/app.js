@@ -1030,18 +1030,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Configure motion cue visuals
         motionCueOverlay.style.display = "flex";
+        motionArrow.className = "motion-arrow";
         if (challenge.action === "TURN_HEAD_LEFT") {
             liveActionBadge.textContent = "QUAY ĐẦU SANG TRÁI";
-            motionArrow.textContent = "➔"; // Mirrored selfie view points left
-            motionLabel.textContent = "Quay đầu sang trái";
+            motionArrow.textContent = "←";
+            motionArrow.classList.add("arrow-left");
+            motionLabel.textContent = "Quay đầu sang bên TRÁI ◀";
         } else if (challenge.action === "TURN_HEAD_RIGHT") {
             liveActionBadge.textContent = "QUAY ĐẦU SANG PHẢI";
-            motionArrow.textContent = "←";
-            motionLabel.textContent = "Quay đầu sang phải";
+            motionArrow.textContent = "➔";
+            motionArrow.classList.add("arrow-right");
+            motionLabel.textContent = "Quay đầu sang bên PHẢI ▶";
         } else if (challenge.action === "NOD_HEAD") {
             liveActionBadge.textContent = "GẬT ĐẦU NHẸ";
             motionArrow.textContent = "↓";
-            motionLabel.textContent = "Gật đầu nhẹ xuống";
+            motionArrow.classList.add("arrow-down");
+            motionLabel.textContent = "Gật đầu nhẹ xuống ▼";
         } else {
             liveActionBadge.textContent = "NHÌN THẲNG";
             motionArrow.textContent = "⦿";
