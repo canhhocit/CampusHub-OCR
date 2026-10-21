@@ -7,6 +7,14 @@ from app.schemas.ocr import (
     OCRResponse,
     HealthResponse,
 )
+from app.schemas.face import (
+    FaceBoundingBox,
+    FaceLandmarks,
+    FaceQualityCheck,
+    FaceDetectionResult,
+    FaceVerificationResponse,
+    FaceHealthResponse,
+)
 
 __all__ = [
     "CardSide",
@@ -16,4 +24,10 @@ __all__ = [
     "ImageMetadata",
     "OCRResponse",
     "HealthResponse",
+    "FaceBoundingBox",
+    "FaceLandmarks",
+    "FaceQualityCheck",
+    "FaceDetectionResult",
+    "FaceVerificationResponse",
+    "FaceHealthResponse",
 ]

@@ -250,23 +250,55 @@ python evaluate.py --mode all --output-json tests/fixtures/sample_report.json
 
 ---
 
-## 8. Nguyên tắc Bảo mật & Giới hạn Phạm vi
+---
+
+## 8. Module So khớp Khuôn mặt Cô lập (Isolated 1:1 Face Verification)
+
+Dự án tích hợp một module PoC độc lập phục vụ đối sánh sinh trắc học 1:1 giữa ảnh chân dung in trên mặt trước CCCD và ảnh selfie từ webcam:
+
+- **Mô hình**:
+  - Face Detection: **YuNet** (`face_detection_yunet_2023mar.onnx`, ~230 KB, Apache-2.0).
+  - Face Recognition: **SFace** (`face_recognition_sface_2021dec.onnx`, ~37 MB, Apache-2.0).
+- **Đặc trưng**:
+  - Không cần cài thêm thư viện phụ thuộc (tận dụng trực tiếp `cv2.FaceDetectorYN` và `cv2.FaceRecognizerSF` trong OpenCV 4.11).
+  - Tự động cách ly vùng chân dung thẻ CCCD (nửa trái $X_c \le 0.52 \cdot W$) không cần OCR text.
+  - Kiểm tra chất lượng khuôn mặt (kích thước tối thiểu, độ sáng, độ sắc nét Laplacian, tỷ lệ khung hình).
+  - Trích xuất 128-d embedding, so khớp độ tương đồng Cosine, cấu hình ngưỡng động.
+  - Điểm tin cậy (confidence score) chuẩn hóa trực quan [0.0 - 1.0].
+
+### Endpoints
+- `GET /api/v1/face/health`: Trạng thái nạp mô hình và cấu hình ngưỡng.
+- `POST /api/v1/face/verify`: So khớp hai tệp ảnh `card_file` và `selfie_file` (kèm tham số `threshold` tùy chọn).
+
+### Đánh giá Benchmark
+```bash
+# Chạy đánh giá giả lập (synthetic)
+python evaluate_face.py --synthetic
+
+# Chạy đánh giá với manifest dữ liệu mẫu
+python evaluate_face.py --manifest path/to/manifest.json --out face_benchmark.json
+```
+
+---
+
+## 9. Nguyên tắc Bảo mật & Giới hạn Phạm vi
 
 1. **Bảo mật dữ liệu (Data Privacy)**:
    - Dịch vụ chỉ mở trên `127.0.0.1` (localhost).
    - Hình ảnh tải lên được đọc và xử lý hoàn toàn trong bộ nhớ RAM, **không ghi tệp vĩnh viễn** xuống đĩa máy chủ.
-   - Không log base64 hình ảnh, không log số CCCD hoặc thông tin cá nhân ra console.
-   - Không gọi ra bất kỳ dịch vụ OCR đám mây bên thứ ba nào.
+   - Không log base64 hình ảnh, không log số CCCD, không log vector embedding khuôn mặt hoặc thông tin cá nhân ra console.
+   - Không gọi ra bất kỳ dịch vụ đám mây bên thứ ba nào.
 
 2. **Giới hạn phạm vi (Explicit Scope Boundaries)**:
-   - Dự án **CHƯA** bao gồm so khớp khuôn mặt (face verification / face matching).
    - Dự án **CHƯA** bao gồm kiểm tra liveness hoặc chống giả mạo khuôn mặt (anti-spoofing).
+   - Dự án **CHƯA** đọc mã QR mặt trước thẻ CCCD.
    - Chưa tích hợp vào luồng xác thực danh tính sinh viên của CampusHub Backend/Frontend.
-   - Các trường hợp ảnh bị nghiêng > 45 độ, chói lóa mất góc hoặc bị ngón tay che số CCCD có thể khiến trường trả về `NOT_DETECTED` hoặc `UNREADABLE`.
+   - Điểm so khớp sinh trắc học khuôn mặt đạt ngưỡng **không chứng minh** thẻ CCCD là thẻ thật và không thay thế việc kiểm tra pháp lý.
 
 ---
 
-## 9. Bản quyền & Tác giả
+## 10. Bản quyền & Tác giả
 
-- **Dự án**: CampusHub-OCR (Dự án nghiên cứu & thử nghiệm OCR độc lập)
+- **Dự án**: CampusHub-OCR (Dự án nghiên cứu & thử nghiệm OCR và Xác minh khuôn mặt độc lập)
 - **Tác giả / Phát triển**: Phạm Hữu Cảnh
+

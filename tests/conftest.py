@@ -6,6 +6,12 @@ from fastapi.testclient import TestClient
 from PIL import Image
 from app.main import app
 from app.services.ocr_engine import MockOCREngine, set_ocr_engine, BaseOCREngine, get_ocr_engine
+from app.services.face_verifier import (
+    FaceVerifierService,
+    MockFaceEngine,
+    get_face_verifier,
+    set_face_verifier,
+)
 from app.schemas.ocr import RawDetection
 
 @pytest.fixture
@@ -20,6 +26,16 @@ def mock_ocr():
     set_ocr_engine(mock)
     yield mock
     set_ocr_engine(original_engine)
+
+@pytest.fixture
+def mock_face():
+    """Provides a controlled mock Face verifier service for fast and deterministic unit testing."""
+    original_verifier = get_face_verifier()
+    mock_engine = MockFaceEngine()
+    mock_service = FaceVerifierService(engine=mock_engine)
+    set_face_verifier(mock_service)
+    yield mock_service
+    set_face_verifier(original_verifier)
 
 def create_valid_image_bytes(width: int = 600, height: int = 400, format: str = "JPEG") -> bytes:
     """Creates synthetic valid image bytes without saving to disk."""

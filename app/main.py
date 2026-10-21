@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from app.config import settings
 from app.api.routes import router
+from app.api.face_routes import face_router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -32,8 +33,9 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
-# Include API router
+# Include API routers
 app.include_router(router, prefix="/api/v1")
+app.include_router(face_router, prefix="/api/v1/face")
 
 # Web testing interface
 @app.get("/", response_class=HTMLResponse)
