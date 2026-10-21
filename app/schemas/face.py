@@ -36,8 +36,14 @@ class FaceDetectionResult(BaseModel):
 class FaceVerificationResponse(BaseModel):
     success: bool
     match: bool
-    similarity_score: float
-    confidence_score: float
+    similarity_score: float = Field(
+        ...,
+        description="Cosine similarity giữa 2 vector đặc trưng SFace trong khoảng [-1.0, 1.0]."
+    )
+    confidence_score: float = Field(
+        ...,
+        description="Điểm hiển thị trực quan (heuristic display score) được chuẩn hóa từ cosine similarity quanh ngưỡng quyết định; không phải xác suất thống kê đã chuẩn hóa (calibrated probability)."
+    )
     threshold: float
     card_face: FaceDetectionResult
     selfie_face: FaceDetectionResult
@@ -53,3 +59,6 @@ class FaceHealthResponse(BaseModel):
     device: str
     models_loaded: bool
     threshold: float
+    engine_type: str = "real"
+    error_message: Optional[str] = None
+

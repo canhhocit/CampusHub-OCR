@@ -34,6 +34,7 @@ class Settings(BaseModel):
     FACE_MATCH_THRESHOLD: float = float(os.getenv("FACE_MATCH_THRESHOLD", "0.363"))
     FACE_SCORE_THRESHOLD: float = 0.80
     FACE_MIN_SIZE: int = 60
+    ALLOW_MOCK_FACE: bool = os.getenv("ALLOW_MOCK_FACE", "false").lower() == "true"
     FACE_DISCLAIMER: str = (
         "Kết quả so khớp khuôn mặt 1:1 mang tính chất thử nghiệm thuật toán và đối sánh sinh trắc học, "
         "không cấu thành việc định danh pháp lý hoặc kiểm tra chống giả mạo (liveness/anti-spoofing)."

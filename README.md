@@ -256,28 +256,52 @@ python evaluate.py --mode all --output-json tests/fixtures/sample_report.json
 
 Dự án tích hợp một module PoC độc lập phục vụ đối sánh sinh trắc học 1:1 giữa ảnh chân dung in trên mặt trước CCCD và ảnh selfie từ webcam:
 
-- **Mô hình**:
-  - Face Detection: **YuNet** (`face_detection_yunet_2023mar.onnx`, ~230 KB, Apache-2.0).
-  - Face Recognition: **SFace** (`face_recognition_sface_2021dec.onnx`, ~37 MB, Apache-2.0).
-- **Đặc trưng**:
-  - Không cần cài thêm thư viện phụ thuộc (tận dụng trực tiếp `cv2.FaceDetectorYN` và `cv2.FaceRecognizerSF` trong OpenCV 4.11).
-  - Tự động cách ly vùng chân dung thẻ CCCD (nửa trái $X_c \le 0.52 \cdot W$) không cần OCR text.
-  - Kiểm tra chất lượng khuôn mặt (kích thước tối thiểu, độ sáng, độ sắc nét Laplacian, tỷ lệ khung hình).
-  - Trích xuất 128-d embedding, so khớp độ tương đồng Cosine, cấu hình ngưỡng động.
-  - Điểm tin cậy (confidence score) chuẩn hóa trực quan [0.0 - 1.0].
+### 8.1. Mô hình và Bản quyền (Models & Licensing)
+- **Face Detector**: **YuNet** (`face_detection_yunet_2023mar.onnx`, ~232 KB)
+  - Nguồn tải tin cậy: [OpenCV Zoo YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet)
+  - Bản quyền: **Apache-2.0**
+- **Face Recognizer**: **SFace** (`face_recognition_sface_2021dec.onnx`, ~38.6 MB)
+  - Nguồn tải tin cậy: [OpenCV Zoo SFace](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface)
+  - Bản quyền: **Apache-2.0**
+- **Thư mục lưu trữ**: `models/face/` (đã được cấu hình trong `.gitignore` để không commit weights nhị phân lên repository).
 
-### Endpoints
-- `GET /api/v1/face/health`: Trạng thái nạp mô hình và cấu hình ngưỡng.
-- `POST /api/v1/face/verify`: So khớp hai tệp ảnh `card_file` và `selfie_file` (kèm tham số `threshold` tùy chọn).
+### 8.2. Hướng dẫn Cài đặt trên Windows (PowerShell Setup)
+Chạy các lệnh PowerShell sau để chuẩn bị thư mục và tải mô hình ONNX chính thức:
 
-### Đánh giá Benchmark
-```bash
-# Chạy đánh giá giả lập (synthetic)
-python evaluate_face.py --synthetic
+```powershell
+# 1. Tạo thư mục chứa mô hình nếu chưa có
+New-Item -ItemType Directory -Force -Path "models/face"
 
-# Chạy đánh giá với manifest dữ liệu mẫu
-python evaluate_face.py --manifest path/to/manifest.json --out face_benchmark.json
+# 2. Tải YuNet Face Detector (~230 KB)
+Invoke-WebRequest -Uri "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx" -OutFile "models/face/face_detection_yunet_2023mar.onnx"
+
+# 3. Tải SFace Face Recognizer (~37 MB)
+Invoke-WebRequest -Uri "https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx" -OutFile "models/face/face_recognition_sface_2021dec.onnx"
 ```
+
+### 8.3. Kiểm tra Trạng thái Hoạt động (Preflight / Health Check)
+Kiểm tra trạng thái nạp mô hình thực tế qua endpoint `/api/v1/face/health`:
+- **Khi mô hình ONNX đã sẵn sàng**: Trả về `status="ok"`, `models_loaded=true`, `engine_type="real"`.
+- **Khi thiếu file mô hình**: Trả về `status="unavailable"`, `models_loaded=false`, `engine_type="unavailable"`. Hệ thống **tuyệt đối không âm thầm chuyển sang Mock** trong môi trường runtime. Gọi endpoint `/api/v1/face/verify` lúc này sẽ trả về lỗi an toàn **HTTP 503 Service Unavailable**.
+
+### 8.4. Ngữ nghĩa Điểm số & Chất lượng Ảnh
+- **`similarity_score`**: Giá trị Cosine Similarity thô giữa 2 vector đặc trưng 128 chiều trích xuất từ SFace, nằm trong khoảng $[-1.0, 1.0]$. Ngưỡng quyết định mặc định là `0.363` (theo khuyến nghị baseline LFW của OpenCV Zoo, có thể tùy chỉnh qua tham số `threshold`).
+- **`confidence_score`**: Điểm hiển thị trực quan (heuristic display score) được chuẩn hóa từ cosine similarity quanh ngưỡng quyết định $[0.0 - 1.0]$ phục vụ giao diện người dùng. **Lưu ý**: Đây không phải là xác suất thống kê hậu nghiệm đã chuẩn hóa (calibrated posterior probability).
+- **Quy tắc Kiểm tra Chất lượng (Quality Checks)**:
+  - *Từ chối ngay (Rejection - `LOW_QUALITY_FACE`)*: Kích thước khuôn mặt $< 50$ px, độ mờ nét nghiêm trọng (Laplacian $< 15.0$), quá tối ($< 20/255$) hoặc cháy sáng ($> 240/255$).
+  - *Cảnh báo nhẹ (Warning)*: Kích thước $50 - 60$ px, hơi mờ nét ($15 - 35$), thiếu sáng nhẹ ($20 - 40$), lóa sáng nhẹ ($225 - 240$), tỷ lệ khung hình bất thường ($< 0.5$ hoặc $> 1.5$).
+
+### 8.5. Đánh giá & Benchmark
+- **Chế độ Smoke Test Giả lập (`--synthetic`)**:
+  ```bash
+  python evaluate_face.py --synthetic
+  ```
+  *Lưu ý rõ ràng*: Chế độ này sinh dữ liệu giả lập để kiểm tra thông suốt luồng kỹ thuật, tính toán ma trận và xử lý ngưỡng; **không đại diện cho độ chính xác sinh trắc học thực tế**.
+- **Chế độ Đánh giá Ảnh Thật (`--manifest`)**:
+  ```bash
+  python evaluate_face.py --manifest path/to/manifest.json --out face_benchmark.json
+  ```
+  Yêu cầu bắt buộc mô hình YuNet + SFace thực tế đang hoạt động và kiểm tra tính hợp lệ của đường dẫn ảnh, nhãn `is_same_person` để báo cáo chỉ số FAR (False Acceptance Rate) và FRR (False Rejection Rate) theo từng ngưỡng.
 
 ---
 

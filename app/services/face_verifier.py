@@ -16,10 +16,21 @@ from app.schemas.face import (
 
 
 class FaceQualityValidator:
-    """Validates face crop resolution, sharpness, illumination, and geometry."""
+    """Validates face crop resolution, sharpness, illumination, and geometry.
 
-    @staticmethod
-    def validate_quality(image: np.ndarray, bbox: Tuple[int, int, int, int]) -> FaceQualityCheck:
+    Distinguishes strictly between:
+    - Serious quality defects (is_valid = False): causes automatic rejection.
+    - Mild sub-optimal warnings (is_valid = True): warns user while allowing matching.
+    """
+
+    # Serious rejection criteria thresholds
+    SERIOUS_MIN_SIZE: int = 50
+    SERIOUS_MIN_BLUR: float = 15.0
+    SERIOUS_MIN_BRIGHTNESS: float = 20.0
+    SERIOUS_MAX_BRIGHTNESS: float = 240.0
+
+    @classmethod
+    def validate_quality(cls, image: np.ndarray, bbox: Tuple[int, int, int, int]) -> FaceQualityCheck:
         x, y, w, h = bbox
         img_h, img_w = image.shape[:2]
 
@@ -33,6 +44,7 @@ class FaceQualityValidator:
         crop_h = max(0, y1 - y0)
         aspect_ratio = round(crop_w / max(1, crop_h), 2)
         warnings: list[str] = []
+        serious_failures: list[str] = []
 
         if crop_w == 0 or crop_h == 0:
             return FaceQualityCheck(
@@ -48,30 +60,46 @@ class FaceQualityValidator:
         crop = image[y0:y1, x0:x1]
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
 
-        # 1. Size check
-        if crop_w < settings.FACE_MIN_SIZE or crop_h < settings.FACE_MIN_SIZE:
+        # 1. Size / Resolution check
+        if crop_w < cls.SERIOUS_MIN_SIZE or crop_h < cls.SERIOUS_MIN_SIZE:
+            serious_failures.append(
+                f"Kích thước khuôn mặt quá nhỏ ({crop_w}x{crop_h}px) dưới ngưỡng tối thiểu cho phép ({cls.SERIOUS_MIN_SIZE}px)."
+            )
+        elif crop_w < settings.FACE_MIN_SIZE or crop_h < settings.FACE_MIN_SIZE:
             warnings.append(
-                f"Kích thước vùng khuôn mặt quá nhỏ ({crop_w}x{crop_h}px < chuẩn tối thiểu {settings.FACE_MIN_SIZE}px)."
+                f"Kích thước khuôn mặt ({crop_w}x{crop_h}px) nhỏ hơn khuyến nghị ({settings.FACE_MIN_SIZE}px)."
             )
 
-        # 2. Brightness check
+        # 2. Brightness / Illumination check
         brightness = round(float(np.mean(gray)), 2)
-        if brightness < 40.0:
-            warnings.append(f"Khuôn mặt quá tối (độ sáng: {brightness}/255).")
+        if brightness < cls.SERIOUS_MIN_BRIGHTNESS:
+            serious_failures.append(
+                f"Khuôn mặt quá tối/thiếu sáng nghiêm trọng ({brightness}/255 < {cls.SERIOUS_MIN_BRIGHTNESS})."
+            )
+        elif brightness > cls.SERIOUS_MAX_BRIGHTNESS:
+            serious_failures.append(
+                f"Khuôn mặt bị lóa sáng/cháy sáng nghiêm trọng ({brightness}/255 > {cls.SERIOUS_MAX_BRIGHTNESS})."
+            )
+        elif brightness < 40.0:
+            warnings.append(f"Khuôn mặt thiếu sáng ({brightness}/255). Nên chụp ở nơi đủ sáng hơn.")
         elif brightness > 225.0:
-            warnings.append(f"Khuôn mặt bị lóa sáng hoặc cháy sáng (độ sáng: {brightness}/255).")
+            warnings.append(f"Khuôn mặt có vùng bị lóa sáng ({brightness}/255).")
 
         # 3. Sharpness / Blur check (Laplacian variance)
         blur_score = round(float(cv2.Laplacian(gray, cv2.CV_64F).var()), 2)
-        if blur_score < 35.0:
-            warnings.append(f"Khuôn mặt bị mờ nét hoặc rung tay (độ sắc nét Laplacian: {blur_score}).")
+        if blur_score < cls.SERIOUS_MIN_BLUR:
+            serious_failures.append(
+                f"Khuôn mặt bị nhòe mờ/mất nét nghiêm trọng (Laplacian: {blur_score} < {cls.SERIOUS_MIN_BLUR})."
+            )
+        elif blur_score < 35.0:
+            warnings.append(f"Khuôn mặt hơi mờ nét hoặc có hiện tượng rung tay (Laplacian: {blur_score}).")
 
         # 4. Aspect ratio check
         if aspect_ratio < 0.50 or aspect_ratio > 1.50:
-            warnings.append(f"Tỷ lệ khung hình khuôn mặt bất thường ({aspect_ratio}).")
+            warnings.append(f"Tỷ lệ khung hình khuôn mặt bất thường ({aspect_ratio}), có thể do góc chụp quá nghiêng.")
 
-        # Serious defect if severely tiny or degenerate
-        is_valid = crop_w >= 30 and crop_h >= 30
+        is_valid = len(serious_failures) == 0
+        all_warnings = serious_failures + warnings
 
         return FaceQualityCheck(
             is_valid=is_valid,
@@ -80,7 +108,7 @@ class FaceQualityValidator:
             brightness=brightness,
             blur_score=blur_score,
             aspect_ratio=aspect_ratio,
-            warnings=warnings,
+            warnings=all_warnings,
         )
 
 
@@ -89,12 +117,7 @@ class FaceEngineInterface(ABC):
 
     @abstractmethod
     def detect_faces(self, image: np.ndarray) -> list[dict]:
-        """Detect faces in an image.
-        Returns a list of dicts with:
-          - 'box': (x, y, w, h, score)
-          - 'landmarks': [(re_x, re_y), (le_x, le_y), (nt_x, nt_y), (rmc_x, rmc_y), (lmc_x, lmc_y)]
-          - 'raw': raw engine detection structure
-        """
+        """Detect faces in an image."""
         pass
 
     @abstractmethod
@@ -121,9 +144,15 @@ class YuNetSFaceEngine(FaceEngineInterface):
         self.recognizer_path = recognizer_path or os.path.join(base_dir, settings.FACE_RECOGNIZER_MODEL)
 
         if not os.path.exists(self.detector_path):
-            raise FileNotFoundError(f"YuNet model file not found at: {self.detector_path}")
+            raise FileNotFoundError(
+                f"Tệp mô hình YuNet không tồn tại tại: {self.detector_path}. "
+                f"Vui lòng tải từ OpenCV Zoo và lưu vào {base_dir}/."
+            )
         if not os.path.exists(self.recognizer_path):
-            raise FileNotFoundError(f"SFace model file not found at: {self.recognizer_path}")
+            raise FileNotFoundError(
+                f"Tệp mô hình SFace không tồn tại tại: {self.recognizer_path}. "
+                f"Vui lòng tải từ OpenCV Zoo và lưu vào {base_dir}/."
+            )
 
         # Initialize detector with default shape (will update per image)
         self._detector = cv2.FaceDetectorYN.create(
@@ -146,7 +175,6 @@ class YuNetSFaceEngine(FaceEngineInterface):
 
         results = []
         for face_row in faces:
-            # Format: [x, y, w, h, x_re, y_re, x_le, y_le, x_nt, y_nt, x_rcm, y_rcm, x_lcm, y_lcm, score]
             x, y, bw, bh = int(face_row[0]), int(face_row[1]), int(face_row[2]), int(face_row[3])
             score = float(face_row[14])
             landmarks = [
@@ -169,13 +197,15 @@ class YuNetSFaceEngine(FaceEngineInterface):
         return feat
 
     def compute_similarity(self, feat1: np.ndarray, feat2: np.ndarray) -> float:
-        # cv2.FaceRecognizerSF.match with FR_COSINE returns cosine similarity in [-1, 1]
         cosine_sim = self._recognizer.match(feat1, feat2, cv2.FaceRecognizerSF_FR_COSINE)
         return float(cosine_sim)
 
 
 class MockFaceEngine(FaceEngineInterface):
-    """Deterministic mock engine for offline unit testing without ONNX files."""
+    """Deterministic mock engine ONLY for unit testing and CI test environments.
+
+    MUST NOT be used as a silent fallback during standard application execution.
+    """
 
     def __init__(self):
         self.mock_faces_map: dict[int, list[dict]] = {}
@@ -186,12 +216,10 @@ class MockFaceEngine(FaceEngineInterface):
 
     def detect_faces(self, image: np.ndarray) -> list[dict]:
         img_h, img_w = image.shape[:2]
-        # Allow preconfigured detections by image size or hash
         key = img_w * 10000 + img_h
         if key in self.mock_faces_map:
             return self.mock_faces_map[key]
 
-        # By default, detect a centered face if image has standard dimensions
         if img_w < 50 or img_h < 50:
             return []
 
@@ -213,7 +241,6 @@ class MockFaceEngine(FaceEngineInterface):
         }]
 
     def extract_embedding(self, image: np.ndarray, face_data: dict) -> np.ndarray:
-        # Create a deterministic normalized 128-dim embedding based on average pixel intensity
         mean_val = float(np.mean(image))
         vec = np.ones((1, 128), dtype=np.float32) * (mean_val / 255.0)
         norm = np.linalg.norm(vec)
@@ -234,14 +261,37 @@ class FaceVerifierService:
     """Orchestrates 1:1 face verification between CCCD front-side portrait and selfie."""
 
     def __init__(self, engine: Optional[FaceEngineInterface] = None):
+        self.engine: Optional[FaceEngineInterface] = None
+        self.init_error: Optional[str] = None
+        self.is_injected: bool = False
+
         if engine is not None:
             self.engine = engine
+            self.is_injected = True
         else:
+            # Normal startup: attempt to load real YuNet + SFace models.
+            # HARDENING: NEVER silently fall back to MockFaceEngine in runtime.
             try:
                 self.engine = YuNetSFaceEngine()
-            except Exception:
-                # Fallback to mock if weights are not installed yet
-                self.engine = MockFaceEngine()
+            except Exception as e:
+                self.engine = None
+                self.init_error = str(e)
+
+    def is_ready(self) -> bool:
+        """Returns True if a valid execution engine is loaded and operational."""
+        return self.engine is not None
+
+    def is_mock(self) -> bool:
+        """Returns True if the active engine is a mock implementation."""
+        return isinstance(self.engine, MockFaceEngine)
+
+    def get_status_message(self) -> str:
+        """Returns diagnostic message about the engine state."""
+        if not self.is_ready():
+            return f"Mô hình nhận dạng khuôn mặt chưa sẵn sàng: {self.init_error}"
+        if self.is_mock():
+            return "Đang sử dụng MockFaceEngine (môi trường kiểm thử có tiêm mock)"
+        return "Mô hình thực tế (YuNet + SFace) đang hoạt động bình thường"
 
     def _select_cccd_portrait_face(
         self,
@@ -249,12 +299,7 @@ class FaceVerifierService:
         img_w: int,
         img_h: int,
     ) -> Tuple[Optional[dict], Optional[str], Optional[str]]:
-        """Filter face detection for the printed cardholder portrait on Vietnamese CCCD.
-
-        The portrait on a Vietnamese CCCD is on the left half of the card:
-        - Center X is typically <= 0.50 * card_width
-        - Center Y is typically between 0.15 * card_height and 0.92 * card_height
-        """
+        """Filter face detection for the printed cardholder portrait on Vietnamese CCCD."""
         if not faces:
             return None, "NO_FACE_DETECTED", "Không tìm thấy khuôn mặt chân dung trong ảnh thẻ CCCD."
 
@@ -271,11 +316,9 @@ class FaceVerifierService:
         if len(candidates) == 1:
             return candidates[0], None, None
         elif len(candidates) > 1:
-            # Select the largest face in the portrait area
             candidates.sort(key=lambda c: c["box"][2] * c["box"][3], reverse=True)
             return candidates[0], None, None
         else:
-            # If no face is in the standard portrait zone, check if exactly one face was found overall
             if len(faces) == 1:
                 return faces[0], None, None
             return (
@@ -321,6 +364,13 @@ class FaceVerifierService:
         x, y, w, h, score = face_data["box"]
         quality = FaceQualityValidator.validate_quality(image, (x, y, w, h))
 
+        # Check for serious quality failure
+        effective_error_code = error_code
+        effective_error_message = error_message
+        if not quality.is_valid:
+            effective_error_code = "LOW_QUALITY_FACE"
+            effective_error_message = "; ".join(quality.warnings)
+
         raw_landmarks = face_data.get("landmarks", [])
         landmarks_obj = None
         if len(raw_landmarks) >= 5:
@@ -333,13 +383,13 @@ class FaceVerifierService:
             )
 
         return FaceDetectionResult(
-            detected=True,
+            detected=quality.is_valid,
             count=count,
             box=FaceBoundingBox(x=x, y=y, width=w, height=h, confidence=round(score, 4)),
             landmarks=landmarks_obj,
             quality=quality,
-            error_code=None,
-            error_message=None,
+            error_code=effective_error_code,
+            error_message=effective_error_message,
         )
 
     def verify_faces(
@@ -349,8 +399,25 @@ class FaceVerifierService:
         threshold: Optional[float] = None,
     ) -> FaceVerificationResponse:
         start_time = time.perf_counter()
+
+        # HARDENING: Check engine readiness
+        if not self.is_ready():
+            raise RuntimeError(
+                f"FaceVerifierService chưa sẵn sàng: {self.init_error or 'Mô hình chưa được nạp'}"
+            )
+
+        # HARDENING: Check mock execution authorization
+        if self.is_mock() and not self.is_injected and not settings.ALLOW_MOCK_FACE:
+            raise RuntimeError(
+                "MockFaceEngine bị vô hiệu hóa trong môi trường thực thi runtime. "
+                "Cần cài đặt mô hình YuNet/SFace hoặc bật ALLOW_MOCK_FACE=true cho test."
+            )
+
         effective_threshold = threshold if threshold is not None else settings.FACE_MATCH_THRESHOLD
-        effective_threshold = max(-1.0, min(1.0, effective_threshold))
+        if effective_threshold < -1.0 or effective_threshold > 1.0:
+            raise ValueError(
+                f"Ngưỡng so khớp (threshold) không hợp lệ ({effective_threshold}). Phải nằm trong khoảng [-1.0, 1.0]."
+            )
 
         card_h, card_w = card_image.shape[:2]
         selfie_h, selfie_w = selfie_image.shape[:2]
@@ -361,7 +428,7 @@ class FaceVerifierService:
             card_all_faces = self.engine.detect_faces(card_image)
         except Exception as e:
             return self._build_error_response(
-                "Lỗi hệ thống khi nhận diện khuôn mặt trên thẻ CCCD.",
+                f"Lỗi hệ thống khi nhận diện khuôn mặt trên thẻ CCCD: {str(e)}",
                 start_time,
                 effective_threshold,
             )
@@ -378,7 +445,7 @@ class FaceVerifierService:
             selfie_all_faces = self.engine.detect_faces(selfie_image)
         except Exception as e:
             return self._build_error_response(
-                "Lỗi hệ thống khi nhận diện khuôn mặt trong ảnh selfie.",
+                f"Lỗi hệ thống khi nhận diện khuôn mặt trong ảnh selfie: {str(e)}",
                 start_time,
                 effective_threshold,
             )
@@ -388,12 +455,22 @@ class FaceVerifierService:
             selfie_face, selfie_image, len(selfie_all_faces), selfie_err_code, selfie_err_msg
         )
 
-        # 3. Check for early abort on face detection failure
-        if not card_result.detected or not selfie_result.detected:
-            if not card_result.detected and card_err_msg:
-                warnings.append(card_err_msg)
-            if not selfie_result.detected and selfie_err_msg:
-                warnings.append(selfie_err_msg)
+        # 3. Check for abort due to detection failure OR serious quality defect
+        card_has_serious_defect = card_result.quality and not card_result.quality.is_valid
+        selfie_has_serious_defect = selfie_result.quality and not selfie_result.quality.is_valid
+
+        if not card_result.detected or not selfie_result.detected or card_has_serious_defect or selfie_has_serious_defect:
+            if card_has_serious_defect and card_result.quality:
+                for w in card_result.quality.warnings:
+                    warnings.append(f"Ảnh thẻ CCCD lỗi chất lượng: {w}")
+            elif not card_result.detected and card_result.error_message:
+                warnings.append(f"Ảnh thẻ CCCD: {card_result.error_message}")
+
+            if selfie_has_serious_defect and selfie_result.quality:
+                for w in selfie_result.quality.warnings:
+                    warnings.append(f"Ảnh selfie lỗi chất lượng: {w}")
+            elif not selfie_result.detected and selfie_result.error_message:
+                warnings.append(f"Ảnh selfie: {selfie_result.error_message}")
 
             elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
             return FaceVerificationResponse(
@@ -409,7 +486,7 @@ class FaceVerifierService:
                 disclaimer=settings.FACE_DISCLAIMER,
             )
 
-        # 4. Append quality warnings
+        # 4. Append mild quality warnings (if any)
         if card_result.quality and card_result.quality.warnings:
             for w in card_result.quality.warnings:
                 warnings.append(f"Ảnh thẻ: {w}")
@@ -434,14 +511,15 @@ class FaceVerifierService:
         sim_score = round(float(sim_score), 4)
         is_match = bool(sim_score >= effective_threshold)
 
-        # Compute intuitive confidence score [0.0, 1.0]
+        # Compute heuristic display confidence score [0.0, 1.0]
+        # (NOT a calibrated statistical posterior probability)
         if sim_score >= effective_threshold:
             denom = max(0.001, 1.0 - effective_threshold)
             confidence = 0.5 + 0.5 * min(1.0, (sim_score - effective_threshold) / denom)
         else:
             denom = max(0.001, effective_threshold - (-1.0))
             confidence = 0.5 * max(0.0, (sim_score - (-1.0)) / denom)
-        confidence = round(confidence, 4)
+        confidence = round(float(confidence), 4)
 
         elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
 

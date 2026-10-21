@@ -38,8 +38,10 @@ def mock_face():
     set_face_verifier(original_verifier)
 
 def create_valid_image_bytes(width: int = 600, height: int = 400, format: str = "JPEG") -> bytes:
-    """Creates synthetic valid image bytes without saving to disk."""
-    img = Image.new("RGB", (width, height), color=(240, 240, 240))
+    """Creates synthetic valid image bytes with realistic texture without saving to disk."""
+    np.random.seed(42)
+    arr = np.random.randint(60, 200, (height, width, 3), dtype=np.uint8)
+    img = Image.fromarray(arr)
     buf = io.BytesIO()
     img.save(buf, format=format)
     return buf.getvalue()
