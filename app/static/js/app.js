@@ -887,6 +887,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const livenessVideo = document.getElementById("livenessVideo");
     const livenessCanvas = document.getElementById("livenessCanvas");
     const faceGuideOval = document.getElementById("faceGuideOval");
+    const ovalHintText = document.getElementById("ovalHintText");
     const motionCueOverlay = document.getElementById("motionCueOverlay");
     const motionArrow = document.getElementById("motionArrow");
     const motionLabel = document.getElementById("motionLabel");
@@ -945,6 +946,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (livenessChallengeCard) livenessChallengeCard.style.display = "none";
         if (motionCueOverlay) motionCueOverlay.style.display = "none";
         if (stopLivenessBtn) stopLivenessBtn.style.display = "none";
+        if (faceGuideOval) {
+            faceGuideOval.classList.remove("active-oval");
+            faceGuideOval.classList.remove("framing-warning");
+        }
+        if (ovalHintText) {
+            ovalHintText.textContent = "Căn chỉnh toàn bộ khuôn mặt vào khung";
+        }
         if (startLivenessBtn) {
             startLivenessBtn.style.display = "inline-flex";
             startLivenessBtn.disabled = false;
@@ -1027,6 +1035,13 @@ document.addEventListener("DOMContentLoaded", () => {
         liveStepBadge.textContent = `Bước ${challenge.step}/${challenge.total_steps}`;
         liveInstructionText.textContent = challenge.instruction;
         liveProgressFill.style.width = "0%";
+
+        if (faceGuideOval) {
+            faceGuideOval.classList.remove("framing-warning");
+        }
+        if (ovalHintText) {
+            ovalHintText.textContent = "Căn chỉnh toàn bộ khuôn mặt vào khung";
+        }
 
         // Configure motion cue visuals
         motionCueOverlay.style.display = "flex";
@@ -1163,13 +1178,17 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
             // STEP FAILED
             showLivenessWarning(result.message);
+            if (result.reason_code === "FACE_OUT_OF_GUIDE" || result.reason_code === "FACE_PARTIALLY_VISIBLE") {
+                if (faceGuideOval) faceGuideOval.classList.add("framing-warning");
+                if (ovalHintText) ovalHintText.textContent = result.message;
+            }
             if (result.status === "FAILED") {
                 showLivenessFailure(result);
             } else {
                 liveStatusText.textContent = "Chưa đạt. Đang chuẩn bị thử lại bước này...";
                 setTimeout(() => {
                     prepareChallengeStep(challenge);
-                }, 2000);
+                }, 2200);
             }
         }
     }

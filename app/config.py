@@ -68,6 +68,20 @@ class Settings(BaseModel):
     LIVENESS_YAW_TURN_LEFT_MIN: float = 0.65
     LIVENESS_YAW_TURN_RIGHT_MAX: float = 0.35
     LIVENESS_MIN_MOTION_VARIANCE: float = 0.04
+
+    # Face-framing validation settings (normalized coordinates in [0.0, 1.0])
+    LIVENESS_FACE_MIN_HEIGHT_RATIO: float = float(os.getenv("LIVENESS_FACE_MIN_HEIGHT_RATIO", "0.20"))
+    LIVENESS_FACE_MAX_HEIGHT_RATIO: float = float(os.getenv("LIVENESS_FACE_MAX_HEIGHT_RATIO", "0.80"))
+    LIVENESS_FACE_MIN_WIDTH_RATIO: float = float(os.getenv("LIVENESS_FACE_MIN_WIDTH_RATIO", "0.15"))
+    LIVENESS_FACE_MAX_WIDTH_RATIO: float = float(os.getenv("LIVENESS_FACE_MAX_WIDTH_RATIO", "0.75"))
+    LIVENESS_FACE_CENTER_X_MIN: float = float(os.getenv("LIVENESS_FACE_CENTER_X_MIN", "0.22"))
+    LIVENESS_FACE_CENTER_X_MAX: float = float(os.getenv("LIVENESS_FACE_CENTER_X_MAX", "0.78"))
+    LIVENESS_FACE_CENTER_Y_MIN: float = float(os.getenv("LIVENESS_FACE_CENTER_Y_MIN", "0.20"))
+    LIVENESS_FACE_CENTER_Y_MAX: float = float(os.getenv("LIVENESS_FACE_CENTER_Y_MAX", "0.65"))
+    LIVENESS_FRAME_MARGIN_RATIO: float = float(os.getenv("LIVENESS_FRAME_MARGIN_RATIO", "0.03"))
+    LIVENESS_MAX_EYE_Y_RATIO: float = float(os.getenv("LIVENESS_MAX_EYE_Y_RATIO", "0.58"))
+    LIVENESS_MAX_MOUTH_Y_RATIO: float = float(os.getenv("LIVENESS_MAX_MOUTH_Y_RATIO", "0.88"))
+
     LIVENESS_DISCLAIMER: str = (
         "Kết quả kiểm tra thực thể sống V1 (Liveness Detection) dựa trên thách thức chủ động (Active Challenge). "
         "Đây là phiên bản thử nghiệm thuật toán (research prototype), không thay thế chứng thực sinh trắc học chuẩn quốc tế "

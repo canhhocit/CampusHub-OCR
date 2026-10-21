@@ -34,6 +34,8 @@ class FrameMetric(BaseModel):
     yaw_ratio: Optional[float] = None
     pitch_ratio: Optional[float] = None
     motion_delta: Optional[float] = None
+    framing_valid: Optional[bool] = None
+    framing_reason: Optional[str] = None
 
 
 class LivenessStepVerifyResponse(BaseModel):

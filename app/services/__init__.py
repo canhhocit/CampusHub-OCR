@@ -15,6 +15,8 @@ from app.services.liveness_service import (
     BaseLivenessDetector,
     YuNetLivenessDetector,
     MockLivenessDetector,
+    FaceFramingValidator,
+    FramingValidationResult,
     get_liveness_service,
     set_liveness_service,
 )

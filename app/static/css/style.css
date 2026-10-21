@@ -991,6 +991,18 @@ body {
     border-style: solid;
 }
 
+.face-guide-oval.framing-warning .oval-border {
+    border-color: #f59e0b;
+    border-style: solid;
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.45);
+}
+
+.face-guide-oval.framing-warning .oval-hint {
+    background: rgba(180, 83, 9, 0.85);
+    border-color: rgba(245, 158, 11, 0.5);
+    color: #fef3c7;
+}
+
 .oval-hint {
     margin-top: 12px;
     color: #ffffff;
@@ -1000,6 +1012,10 @@ body {
     padding: 4px 14px;
     border-radius: 16px;
     border: 1px solid rgba(255, 255, 255, 0.15);
+    max-width: 90%;
+    text-align: center;
+    line-height: 1.4;
+    transition: all 0.2s ease;
 }
 
 /* Motion Cue Overlay */

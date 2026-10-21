@@ -11,6 +11,8 @@ from app.services.liveness_service import (
     LivenessService,
     LivenessSessionState,
     MockLivenessDetector,
+    FaceFramingValidator,
+    FramingValidationResult,
     get_liveness_service,
     set_liveness_service,
 )
@@ -386,4 +388,283 @@ def test_missing_yunet_liveness_model_raises_filenotfound():
     from app.services.liveness_service import YuNetLivenessDetector
     with pytest.raises(FileNotFoundError):
         YuNetLivenessDetector(model_path="models/face/nonexistent_liveness.onnx")
+
+
+# =========================================================================
+# 5. Face-Framing Validation Regression Tests (Task Requirements)
+# =========================================================================
+
+def test_face_framing_validator_full_face_correctly_positioned():
+    """1. Full face correctly positioned with normal proportions passes framing validation."""
+    # 640x480 frame, centered face: box at (200, 100), size (240, 260) -> center (320, 230) -> (0.50, 0.479)
+    box = (200, 100, 240, 260, 0.99)
+    landmarks = [
+        (260, 180),  # right eye
+        (380, 180),  # left eye
+        (320, 230),  # nose tip
+        (270, 300),  # right mouth
+        (370, 300),  # left mouth
+    ]
+    res = FaceFramingValidator.validate_frame(box, landmarks, img_w=640, img_h=480)
+    assert res.is_valid is True
+    assert res.reason_code is None
+    assert res.details["center_x"] == 0.5
+    assert 0.40 <= res.details["center_y"] <= 0.55
+
+
+def test_face_framing_validator_face_shifted_too_far_down_rejected(client, mock_liveness):
+    """2. Face shifted too far down is rejected with FACE_OUT_OF_GUIDE."""
+    # 640x480 frame, face located near bottom: center_y = (340 + 60) / 480 = 0.833 > 0.65
+    box = (220, 340, 200, 120, 0.99)
+    landmarks = [
+        (270, 370),
+        (370, 370),
+        (320, 400),
+        (280, 430),
+        (360, 430),
+    ]
+    # Unit validator test
+    res = FaceFramingValidator.validate_frame(box, landmarks, img_w=640, img_h=480)
+    assert res.is_valid is False
+    assert res.reason_code == "FACE_OUT_OF_GUIDE"
+    assert "quá thấp" in res.message
+
+    # End-to-end API test
+    service, detector = mock_liveness
+    create_res = client.post("/api/v1/liveness/session/create")
+    session_id = create_res.json()["session_id"]
+
+    detector.set_preset_results([[{"box": box, "landmarks": landmarks}]] * 4)
+    frame_bytes = create_synthetic_frame_bytes(width=640, height=480)
+    files = [("frames", (f"f{i}.jpg", frame_bytes, "image/jpeg")) for i in range(4)]
+    api_res = client.post(f"/api/v1/liveness/session/{session_id}/verify-step", files=files)
+
+    assert api_res.status_code == 200
+    data = api_res.json()
+    assert data["step_passed"] is False
+    assert data["reason_code"] == "FACE_OUT_OF_GUIDE"
+    assert "quá thấp" in data["message"]
+
+
+def test_face_framing_validator_only_upper_face_or_eyes_in_guide_rejected(client, mock_liveness):
+    """
+    3. User ducks down so only eyes/upper face appear in guide oval (original failure reproduction).
+    The bottom of the face / mouth is near or crossing the frame bottom.
+    System MUST reject with FACE_PARTIALLY_VISIBLE or FACE_OUT_OF_GUIDE.
+    """
+    # Chin/mouth crosses frame bottom boundary: box y=320, h=160 -> bottom = 480 (edge)
+    box = (220, 320, 200, 160, 0.99)
+    landmarks = [
+        (270, 360),
+        (370, 360),
+        (320, 420),
+        (280, 475),  # mouth near frame bottom
+        (360, 475),
+    ]
+    # Unit test
+    res = FaceFramingValidator.validate_frame(box, landmarks, img_w=640, img_h=480)
+    assert res.is_valid is False
+    assert res.reason_code in ["FACE_PARTIALLY_VISIBLE", "FACE_OUT_OF_GUIDE"]
+
+    # End-to-end API test verifying bug cannot pass
+    service, detector = mock_liveness
+    create_res = client.post("/api/v1/liveness/session/create")
+    session_id = create_res.json()["session_id"]
+
+    detector.set_preset_results([[{"box": box, "landmarks": landmarks}]] * 4)
+    frame_bytes = create_synthetic_frame_bytes(width=640, height=480)
+    files = [("frames", (f"f{i}.jpg", frame_bytes, "image/jpeg")) for i in range(4)]
+    api_res = client.post(f"/api/v1/liveness/session/{session_id}/verify-step", files=files)
+
+    assert api_res.status_code == 200
+    data = api_res.json()
+    assert data["step_passed"] is False
+    assert data["reason_code"] in ["FACE_PARTIALLY_VISIBLE", "FACE_OUT_OF_GUIDE"]
+
+
+def test_face_framing_validator_face_shifted_too_far_up_or_sideways_rejected():
+    """4. Face shifted too far up or sideways is rejected."""
+    # A. Too far up: center_y = (15 + 40) / 480 = 0.114 < 0.20
+    box_up = (220, 15, 200, 80, 0.99)
+    landmarks_up = [(270, 40), (370, 40), (320, 60), (280, 80), (360, 80)]
+    res_up = FaceFramingValidator.validate_frame(box_up, landmarks_up, img_w=640, img_h=480)
+    assert res_up.is_valid is False
+    assert res_up.reason_code in ["FACE_OUT_OF_GUIDE", "FACE_PARTIALLY_VISIBLE"]
+
+    # B. Too far left: center_x = (20 + 75) / 640 = 0.148 < 0.22
+    box_left = (20, 120, 150, 200, 0.99)
+    landmarks_left = [(50, 180), (120, 180), (80, 220), (60, 260), (110, 260)]
+    res_left = FaceFramingValidator.validate_frame(box_left, landmarks_left, img_w=640, img_h=480)
+    assert res_left.is_valid is False
+    assert res_left.reason_code in ["FACE_OUT_OF_GUIDE", "FACE_PARTIALLY_VISIBLE"]
+
+    # C. Too far right: center_x = (470 + 75) / 640 = 0.851 > 0.78
+    box_right = (470, 120, 150, 200, 0.99)
+    landmarks_right = [(500, 180), (570, 180), (540, 220), (510, 260), (560, 260)]
+    res_right = FaceFramingValidator.validate_frame(box_right, landmarks_right, img_w=640, img_h=480)
+    assert res_right.is_valid is False
+    assert res_right.reason_code in ["FACE_OUT_OF_GUIDE", "FACE_PARTIALLY_VISIBLE"]
+
+
+def test_face_framing_validator_face_clipped_by_boundaries_rejected():
+    """5. Face partially clipped at any frame boundary is rejected with FACE_PARTIALLY_VISIBLE."""
+    # Top border clipping (box starts at y=5 < 0.03 * 480)
+    box_top_clipped = (220, 5, 200, 220, 0.99)
+    landmarks = [(270, 80), (370, 80), (320, 130), (280, 170), (360, 170)]
+    res_top = FaceFramingValidator.validate_frame(box_top_clipped, landmarks, img_w=640, img_h=480)
+    assert res_top.is_valid is False
+    assert res_top.reason_code == "FACE_PARTIALLY_VISIBLE"
+
+    # Bottom border clipping (box bottom reaches 475 > 480 * 0.97 = 465.6)
+    box_bottom_clipped = (220, 260, 200, 215, 0.99)
+    res_bottom = FaceFramingValidator.validate_frame(box_bottom_clipped, landmarks, img_w=640, img_h=480)
+    assert res_bottom.is_valid is False
+    assert res_bottom.reason_code == "FACE_PARTIALLY_VISIBLE"
+
+    # Left border clipping (box left = 5 < 640 * 0.03 = 19.2)
+    box_left_clipped = (5, 120, 200, 220, 0.99)
+    res_left = FaceFramingValidator.validate_frame(box_left_clipped, landmarks, img_w=640, img_h=480)
+    assert res_left.is_valid is False
+    assert res_left.reason_code == "FACE_PARTIALLY_VISIBLE"
+
+    # Right border clipping (box right = 440 + 195 = 635 > 640 * 0.97 = 620.8)
+    box_right_clipped = (440, 120, 195, 220, 0.99)
+    res_right = FaceFramingValidator.validate_frame(box_right_clipped, landmarks, img_w=640, img_h=480)
+    assert res_right.is_valid is False
+    assert res_right.reason_code == "FACE_PARTIALLY_VISIBLE"
+
+
+def test_liveness_step_face_positioned_correctly_turning_left_passes(client, mock_liveness):
+    """6. Face positioned correctly while turning left passes when challenge requires TURN_HEAD_LEFT."""
+    service, detector = mock_liveness
+
+    session_id = "live_test_turn_left"
+    service._sessions[session_id] = LivenessSessionState(
+        session_id=session_id,
+        challenges=[ChallengeAction.TURN_HEAD_LEFT],
+    )
+
+    # 4 frames: Centered face, yaw turning left (nose moves towards left eye)
+    # Right eye x=260, Left eye x=360 (inter-eye=100)
+    # Frame 0: nose x=310 (yaw 0.50)
+    # Frame 1: nose x=325 (yaw 0.65)
+    # Frame 2: nose x=335 (yaw 0.75)
+    # Frame 3: nose x=340 (yaw 0.80)
+    box = (200, 100, 240, 260, 0.99)
+    frames_data = [
+        [{"box": box, "landmarks": [(260, 180), (360, 180), (310, 230), (270, 300), (350, 300)]}],
+        [{"box": box, "landmarks": [(260, 180), (360, 180), (325, 230), (270, 300), (350, 300)]}],
+        [{"box": box, "landmarks": [(260, 180), (360, 180), (335, 230), (270, 300), (350, 300)]}],
+        [{"box": box, "landmarks": [(260, 180), (360, 180), (340, 230), (270, 300), (350, 300)]}],
+    ]
+    detector.set_preset_results(frames_data)
+
+    frame_bytes = create_synthetic_frame_bytes(width=640, height=480)
+    files = [("frames", (f"f{i}.jpg", frame_bytes, "image/jpeg")) for i in range(4)]
+    res = client.post(f"/api/v1/liveness/session/{session_id}/verify-step", files=files)
+
+    assert res.status_code == 200
+    data = res.json()
+    assert data["step_passed"] is True
+    assert data["all_passed"] is True
+    assert data["status"] == "PASSED"
+
+
+def test_liveness_step_face_positioned_correctly_turning_right_passes(client, mock_liveness):
+    """7. Face positioned correctly while turning right passes when challenge requires TURN_HEAD_RIGHT."""
+    service, detector = mock_liveness
+
+    session_id = "live_test_turn_right"
+    service._sessions[session_id] = LivenessSessionState(
+        session_id=session_id,
+        challenges=[ChallengeAction.TURN_HEAD_RIGHT],
+    )
+
+    # 4 frames: Centered face, yaw turning right (nose moves towards right eye)
+    # Right eye x=260, Left eye x=360 (inter-eye=100)
+    # Frame 0: nose x=310 (yaw 0.50)
+    # Frame 1: nose x=295 (yaw 0.35)
+    # Frame 2: nose x=285 (yaw 0.25)
+    # Frame 3: nose x=280 (yaw 0.20)
+    box = (200, 100, 240, 260, 0.99)
+    frames_data = [
+        [{"box": box, "landmarks": [(260, 180), (360, 180), (310, 230), (270, 300), (350, 300)]}],
+        [{"box": box, "landmarks": [(260, 180), (360, 180), (295, 230), (270, 300), (350, 300)]}],
+        [{"box": box, "landmarks": [(260, 180), (360, 180), (285, 230), (270, 300), (350, 300)]}],
+        [{"box": box, "landmarks": [(260, 180), (360, 180), (280, 230), (270, 300), (350, 300)]}],
+    ]
+    detector.set_preset_results(frames_data)
+
+    frame_bytes = create_synthetic_frame_bytes(width=640, height=480)
+    files = [("frames", (f"f{i}.jpg", frame_bytes, "image/jpeg")) for i in range(4)]
+    res = client.post(f"/api/v1/liveness/session/{session_id}/verify-step", files=files)
+
+    assert res.status_code == 200
+    data = res.json()
+    assert data["step_passed"] is True
+    assert data["all_passed"] is True
+
+
+def test_liveness_natural_head_turn_small_motion_does_not_false_reject(client, mock_liveness):
+    """8. Face moves naturally (slight translation along with rotation) without false framing rejection."""
+    service, detector = mock_liveness
+
+    session_id = "live_test_natural_shift"
+    service._sessions[session_id] = LivenessSessionState(
+        session_id=session_id,
+        challenges=[ChallengeAction.TURN_HEAD_LEFT],
+    )
+
+    # Face naturally translates by 15-20px as head turns
+    frames_data = [
+        [{"box": (200, 100, 240, 260, 0.99), "landmarks": [(260, 180), (360, 180), (310, 230), (270, 300), (350, 300)]}],
+        [{"box": (208, 103, 240, 260, 0.99), "landmarks": [(268, 183), (368, 183), (328, 233), (278, 303), (358, 303)]}],
+        [{"box": (215, 105, 240, 260, 0.99), "landmarks": [(275, 185), (375, 185), (342, 235), (285, 305), (365, 305)]}],
+        [{"box": (220, 108, 240, 260, 0.99), "landmarks": [(280, 188), (380, 188), (355, 238), (290, 308), (370, 308)]}],
+    ]
+    detector.set_preset_results(frames_data)
+
+    frame_bytes = create_synthetic_frame_bytes(width=640, height=480)
+    files = [("frames", (f"f{i}.jpg", frame_bytes, "image/jpeg")) for i in range(4)]
+    res = client.post(f"/api/v1/liveness/session/{session_id}/verify-step", files=files)
+
+    assert res.status_code == 200
+    data = res.json()
+    assert data["step_passed"] is True
+
+
+def test_liveness_framing_enforced_on_every_frame(client, mock_liveness):
+    """Sequence fails if any frame violates framing rules (even if first 2 frames were valid)."""
+    service, detector = mock_liveness
+
+    session_id = "live_test_frame_fail_middle"
+    service._sessions[session_id] = LivenessSessionState(
+        session_id=session_id,
+        challenges=[ChallengeAction.TURN_HEAD_LEFT],
+    )
+
+    valid_box = (200, 100, 240, 260, 0.99)
+    valid_landmarks = [(260, 180), (360, 180), (310, 230), (270, 300), (350, 300)]
+
+    # Frame 0 and 1 are valid, but Frame 2 drops down so only eyes appear
+    invalid_box = (220, 340, 200, 130, 0.99)
+    invalid_landmarks = [(270, 370), (370, 370), (320, 410), (280, 440), (360, 440)]
+
+    detector.set_preset_results([
+        [{"box": valid_box, "landmarks": valid_landmarks}],
+        [{"box": valid_box, "landmarks": valid_landmarks}],
+        [{"box": invalid_box, "landmarks": invalid_landmarks}],  # VIOLATION on frame 3
+        [{"box": valid_box, "landmarks": valid_landmarks}],
+    ])
+
+    frame_bytes = create_synthetic_frame_bytes(width=640, height=480)
+    files = [("frames", (f"f{i}.jpg", frame_bytes, "image/jpeg")) for i in range(4)]
+    res = client.post(f"/api/v1/liveness/session/{session_id}/verify-step", files=files)
+
+    assert res.status_code == 200
+    data = res.json()
+    assert data["step_passed"] is False
+    assert data["reason_code"] in ["FACE_PARTIALLY_VISIBLE", "FACE_OUT_OF_GUIDE"]
+    assert "Khung hình thứ 3" in data["message"]
+
 

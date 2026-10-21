@@ -63,6 +63,181 @@ class LivenessSessionState:
         )
 
 
+class FramingValidationResult:
+    """Encapsulates the result of face position, size, and framing validation."""
+
+    def __init__(
+        self,
+        is_valid: bool,
+        reason_code: Optional[str] = None,
+        message: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.is_valid: bool = is_valid
+        self.reason_code: Optional[str] = reason_code
+        self.message: Optional[str] = message
+        self.details: Dict[str, Any] = details or {}
+
+
+class FaceFramingValidator:
+    """
+    Dedicated, deterministic validator evaluating face positioning, size,
+    and boundary clipping against the active guide oval for webcam liveness frames.
+    """
+
+    @staticmethod
+    def validate_frame(
+        box: Tuple[int, int, int, int, float],
+        landmarks: List[Tuple[int, int]],
+        img_w: int,
+        img_h: int,
+    ) -> FramingValidationResult:
+        if img_w <= 0 or img_h <= 0:
+            return FramingValidationResult(
+                is_valid=False,
+                reason_code="INVALID_FRAME_DIMENSIONS",
+                message="Kích thước khung hình không hợp lệ.",
+            )
+
+        bx, by, bw, bh = box[0], box[1], box[2], box[3]
+
+        # 1. Normalize all coordinates against actual frame dimensions
+        norm_x = bx / float(img_w)
+        norm_y = by / float(img_h)
+        norm_w = bw / float(img_w)
+        norm_h = bh / float(img_h)
+        box_right = (bx + bw) / float(img_w)
+        box_bottom = (by + bh) / float(img_h)
+        center_x = norm_x + (norm_w / 2.0)
+        center_y = norm_y + (norm_h / 2.0)
+
+        details: Dict[str, Any] = {
+            "center_x": round(center_x, 4),
+            "center_y": round(center_y, 4),
+            "norm_w": round(norm_w, 4),
+            "norm_h": round(norm_h, 4),
+            "box_top": round(norm_y, 4),
+            "box_bottom": round(box_bottom, 4),
+            "box_left": round(norm_x, 4),
+            "box_right": round(box_right, 4),
+        }
+
+        margin = settings.LIVENESS_FRAME_MARGIN_RATIO
+
+        # 2. Frame boundary clipping checks (face cut off by image borders)
+        if norm_y < margin:
+            return FramingValidationResult(
+                is_valid=False,
+                reason_code="FACE_PARTIALLY_VISIBLE",
+                message="Khuôn mặt bị cắt ở cạnh trên khung hình. Vui lòng hạ camera hoặc ngồi thấp hơn để thấy trọn vẹn khuôn mặt.",
+                details=details,
+            )
+
+        if box_bottom > (1.0 - margin):
+            return FramingValidationResult(
+                is_valid=False,
+                reason_code="FACE_PARTIALLY_VISIBLE",
+                message="Khuôn mặt bị cắt ở cạnh dưới khung hình. Vui lòng nâng camera hoặc ngồi cao hơn để thấy trọn vẹn khuôn mặt.",
+                details=details,
+            )
+
+        if norm_x < margin or box_right > (1.0 - margin):
+            return FramingValidationResult(
+                is_valid=False,
+                reason_code="FACE_PARTIALLY_VISIBLE",
+                message="Khuôn mặt bị cắt ở viền cạnh khung hình. Vui lòng căn chỉnh toàn bộ khuôn mặt vào giữa camera.",
+                details=details,
+            )
+
+        # 3. Landmark clipping checks: All facial landmarks must be well inside frame
+        if landmarks:
+            for lx, ly in landmarks:
+                nlx = lx / float(img_w)
+                nly = ly / float(img_h)
+                if nlx < 0.02 or nlx > 0.98 or nly < 0.02 or nly > 0.98:
+                    return FramingValidationResult(
+                        is_valid=False,
+                        reason_code="FACE_PARTIALLY_VISIBLE",
+                        message="Ngũ quan khuôn mặt bị tràn ra ngoài viền khung hình. Vui lòng lùi lại để mặt nằm trọn trong camera.",
+                        details=details,
+                    )
+
+        # 4. Vertical landmark distribution checks (Eye and mouth placement)
+        if len(landmarks) >= 5:
+            re_y = landmarks[0][1] / float(img_h)
+            le_y = landmarks[1][1] / float(img_h)
+            eye_mid_y = (re_y + le_y) / 2.0
+
+            rm_y = landmarks[3][1] / float(img_h)
+            lm_y = landmarks[4][1] / float(img_h)
+            mouth_mid_y = (rm_y + lm_y) / 2.0
+
+            details["eye_mid_y"] = round(eye_mid_y, 4)
+            details["mouth_mid_y"] = round(mouth_mid_y, 4)
+
+            # Reject if only upper face/eyes are in frame or face is lowered
+            if eye_mid_y > settings.LIVENESS_MAX_EYE_Y_RATIO:
+                return FramingValidationResult(
+                    is_valid=False,
+                    reason_code="FACE_OUT_OF_GUIDE",
+                    message="Khuôn mặt đang đặt quá thấp (chỉ thấy phần trên/mắt trong khung). Vui lòng nâng mặt hoặc đưa toàn bộ khuôn mặt vào khung hướng dẫn.",
+                    details=details,
+                )
+
+            # Mouth must be well within image and not touching bottom boundary
+            if mouth_mid_y > settings.LIVENESS_MAX_MOUTH_Y_RATIO:
+                return FramingValidationResult(
+                    is_valid=False,
+                    reason_code="FACE_OUT_OF_GUIDE",
+                    message="Phần miệng/cằm đang ở quá sát cạnh dưới. Vui lòng nâng camera lên để thấy rõ cả cằm và miệng.",
+                    details=details,
+                )
+
+        # 5. Face size ratio checks (Relative to frame)
+        if norm_h < settings.LIVENESS_FACE_MIN_HEIGHT_RATIO or norm_w < settings.LIVENESS_FACE_MIN_WIDTH_RATIO:
+            return FramingValidationResult(
+                is_valid=False,
+                reason_code="FACE_OUT_OF_GUIDE",
+                message="Khuôn mặt quá nhỏ hoặc ở quá xa khung hướng dẫn. Vui lòng tiến lại gần camera hơn.",
+                details=details,
+            )
+
+        if norm_h > settings.LIVENESS_FACE_MAX_HEIGHT_RATIO or norm_w > settings.LIVENESS_FACE_MAX_WIDTH_RATIO:
+            return FramingValidationResult(
+                is_valid=False,
+                reason_code="FACE_OUT_OF_GUIDE",
+                message="Khuôn mặt quá lớn so với khung hướng dẫn. Vui lòng lùi ra xa camera một chút.",
+                details=details,
+            )
+
+        # 6. Center positioning validation within allowed guide zone
+        if center_y > settings.LIVENESS_FACE_CENTER_Y_MAX:
+            return FramingValidationResult(
+                is_valid=False,
+                reason_code="FACE_OUT_OF_GUIDE",
+                message="Khuôn mặt đang đặt quá thấp so với khung hướng dẫn. Vui lòng nâng mặt hoặc nâng camera lên.",
+                details=details,
+            )
+
+        if center_y < settings.LIVENESS_FACE_CENTER_Y_MIN:
+            return FramingValidationResult(
+                is_valid=False,
+                reason_code="FACE_OUT_OF_GUIDE",
+                message="Khuôn mặt đang đặt quá cao so với khung hướng dẫn. Vui lòng hạ mặt hoặc hạ camera xuống.",
+                details=details,
+            )
+
+        if center_x < settings.LIVENESS_FACE_CENTER_X_MIN or center_x > settings.LIVENESS_FACE_CENTER_X_MAX:
+            return FramingValidationResult(
+                is_valid=False,
+                reason_code="FACE_OUT_OF_GUIDE",
+                message="Khuôn mặt đang bị lệch sang một bên. Vui lòng căn chỉnh toàn bộ khuôn mặt vào giữa khung hướng dẫn.",
+                details=details,
+            )
+
+        return FramingValidationResult(is_valid=True, details=details)
+
+
 class BaseLivenessDetector:
     """Abstract base detector interface for frame analysis."""
 
@@ -393,6 +568,16 @@ class LivenessService:
                         session,
                         "INCOMPLETE_LANDMARKS",
                         f"Không đủ 5 điểm mốc khuôn mặt trong khung hình thứ {idx + 1}.",
+                    )
+
+                # Dedicated face-framing, position, and boundary clipping validation
+                framing_result = FaceFramingValidator.validate_frame(box, landmarks, img_w, img_h)
+                if not framing_result.is_valid:
+                    return self._handle_step_failure(
+                        session,
+                        framing_result.reason_code or "FACE_OUT_OF_GUIDE",
+                        f"Khung hình thứ {idx + 1}: {framing_result.message}",
+                        metrics=framing_result.details,
                     )
 
                 yaw, pitch = self._compute_pose_metrics(landmarks)
