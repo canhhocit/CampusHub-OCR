@@ -432,19 +432,25 @@ body {
     letter-spacing: 0.4px;
 }
 
-.badge-VALID {
+.badge-VALID, .badge-EXTRACTED {
     background: var(--success-bg);
     color: var(--success);
     border: 1px solid #bbf7d0;
 }
 
-.badge-NOT_DETECTED {
+.badge-NEEDS_REVIEW {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border: 1px solid #fde68a;
+}
+
+.badge-NOT_DETECTED, .badge-MISSING {
     background: #f1f5f9;
     color: #64748b;
     border: 1px solid #cbd5e1;
 }
 
-.badge-UNREADABLE {
+.badge-UNREADABLE, .badge-INVALID {
     background: var(--danger-bg);
     color: var(--danger);
     border: 1px solid #fecaca;

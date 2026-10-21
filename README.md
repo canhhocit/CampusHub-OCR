@@ -217,19 +217,36 @@ pytest -v
 
 ## 7. Quy trình Đánh giá Benchmark (Evaluation Procedure)
 
-Để đánh giá định lượng độ chính xác OCR và khả năng trích xuất:
+Để đánh giá định lượng độ chính xác OCR và khả năng trích xuất trường dữ liệu một cách lặp lại (repeatable):
+
 ```bash
-python evaluate.py --dataset tests/fixtures/ground_truth_sample.json
+# 1. Chạy đánh giá nhanh cho toàn bộ dữ liệu mẫu giả lập (Synthetic heuristic benchmark, < 1s)
+python evaluate.py --mode synthetic
+
+# 2. Chạy đánh giá end-to-end trên ảnh thẻ mẫu (Image mode với PaddleOCR)
+python evaluate.py --mode image
+
+# 3. So sánh hiệu năng và độ chính xác khi BẬT vs TẮT tiền xử lý ảnh (Preprocessing)
+python evaluate.py --mode image --compare-preprocessing
+
+# 4. Chạy toàn bộ và xuất báo cáo kết quả ra tệp JSON
+python evaluate.py --mode all --output-json tests/fixtures/sample_report.json
 ```
 
-Chương trình sẽ tự động phân tích và xuất bảng báo cáo định lượng:
-- **Exact-Match (EM)**: Tỷ lệ trường trích xuất trùng khớp 100% với dữ liệu chuẩn.
-- **Detection Rate**: Tỷ lệ trường được phát hiện trong văn bản.
-- **Character Error Rate (CER)**: Tỷ lệ sai số ký tự (Substitutions + Deletions + Insertions / Total characters).
-- **Latency**: Thời gian trích xuất trung bình (mili-giây).
-- **Phân loại chất lượng ảnh**: Đo lường tỷ lệ thành công theo nhóm ảnh phòng lab (`high_quality_studio`) và ảnh điện thoại thực tế (`natural_mobile`).
+### Các chỉ số định lượng đo lường:
+- **Field-level Exact-Match (EM)**: Tỷ lệ trường trích xuất chính xác 100% so với ground-truth chuẩn.
+- **Overall Exact-Match**: Tỷ lệ chính xác tổng thể trên toàn bộ các trường đánh giá.
+- **Missing-Field Rate**: Tỷ lệ trường dữ liệu bị bỏ sót hoặc không trích xuất được (`MISSING`).
+- **Invalid-Field Rate**: Tỷ lệ trường dữ liệu trích xuất sai quy chuẩn định dạng hoặc lịch (`INVALID`).
+- **Character Error Rate (CER)**: Tỷ lệ sai số ký tự theo khoảng cách Levenshtein (tính theo từng trường và theo toàn bộ nội dung văn bản thẻ).
+- **Latency Breakdown**:
+  - Thời gian khởi tạo nạp trọng số mô hình OCR (Model Initialization / Cold Start).
+  - Độ trễ suy luận OCR trên từng ảnh (PaddleOCR Inference Time: Mean, Median, Min, Max).
+  - Độ trễ trích xuất trường dữ liệu theo quy tắc không gian (Heuristic Extraction Time: Mean, Median).
+- **Phân loại nguyên nhân lỗi (Error Cause Categorization)**: Tự động phân loại sai số thành `MISSING_IN_OCR`, `OCR_RECOGNITION_ERROR`, `EXTRACTION_LABEL_MISMATCH`, `VALIDATION_FAILURE`, hoặc `NORMALIZATION_MISMATCH`.
+- **Tài liệu Schema Dataset**: Tham khảo quy cách chi tiết tại [`tests/fixtures/SCHEMA.md`](file:///d:/code/DA2/sourcecode/CampusHub-OCR/tests/fixtures/SCHEMA.md).
 
-> **Quy định đạo đức dữ liệu**: Bộ benchmark mẫu trong repository sử dụng 100% dữ liệu nhân thân giả lập (synthetic data). Tuyệt đối không đưa ảnh CCCD thật hoặc dữ liệu cá nhân của người dùng vào mã nguồn Git.
+> **Quy định đạo đức dữ liệu**: Bộ benchmark trong repository sử dụng 100% dữ liệu nhân thân giả lập (synthetic) và thẻ thử nghiệm mẫu (specimen). Tuyệt đối không đưa ảnh CCCD thật hoặc dữ liệu cá nhân của người dùng vào mã nguồn Git.
 
 ---
 

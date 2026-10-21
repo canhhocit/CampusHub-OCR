@@ -53,7 +53,9 @@ uploads/
 *.png
 *.webp
 !tests/fixtures/*.png
+!tests/fixtures/**/*.png
 !tests/fixtures/*.jpg
+!tests/fixtures/**/*.jpg
 !app/static/img/*
 
 # PaddleOCR cached models

@@ -8,9 +8,14 @@ class CardSide(str, Enum):
     AUTO = "AUTO"
 
 class FieldStatus(str, Enum):
-    VALID = "VALID"
-    UNREADABLE = "UNREADABLE"
-    NOT_DETECTED = "NOT_DETECTED"
+    EXTRACTED = "EXTRACTED"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    MISSING = "MISSING"
+    INVALID = "INVALID"
+    # Backward-compatible aliases
+    VALID = "EXTRACTED"
+    NOT_DETECTED = "MISSING"
+    UNREADABLE = "INVALID"
 
 class ExtractedField(BaseModel):
     name: str
@@ -18,7 +23,9 @@ class ExtractedField(BaseModel):
     value: Optional[str] = None
     status: FieldStatus
     confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    extraction_confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
     raw_text: Optional[str] = None
+    validation_message: Optional[str] = None
 
 class RawDetection(BaseModel):
     text: str

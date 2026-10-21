@@ -85,13 +85,15 @@ async def process_ocr(
     else:
         # Check if ID number was found on front side
         if effective_side == CardSide.FRONT:
-            id_f = fields.get("id_number")
-            if not id_f or id_f.status != FieldStatus.VALID:
-                warnings.append("Không phát hiện được số CCCD (12 chữ số). Ảnh có thể bị mờ, chói lóa hoặc bị che khuất.")
+            id_f = fields.get("idNumber") or fields.get("id_number")
+            if not id_f or id_f.status in (FieldStatus.MISSING, FieldStatus.INVALID):
+                msg = id_f.validation_message if (id_f and id_f.validation_message) else "Không phát hiện được số CCCD (12 chữ số). Ảnh có thể bị mờ, chói lóa hoặc bị che khuất."
+                warnings.append(msg)
         else:
-            issue_d = fields.get("issue_date")
-            if not issue_d or issue_d.status != FieldStatus.VALID:
-                warnings.append("Không phát hiện được ngày cấp trên mặt sau của thẻ.")
+            issue_d = fields.get("issueDate") or fields.get("issue_date")
+            if not issue_d or issue_d.status in (FieldStatus.MISSING, FieldStatus.INVALID):
+                msg = issue_d.validation_message if (issue_d and issue_d.validation_message) else "Không phát hiện được ngày cấp trên mặt sau của thẻ."
+                warnings.append(msg)
 
     elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
 

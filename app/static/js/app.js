@@ -215,7 +215,14 @@ document.addEventListener("DOMContentLoaded", () => {
         // Render Structured Fields
         fieldsTbody.innerHTML = "";
         const fields = data.fields;
-        for (const [key, field] of Object.entries(fields)) {
+        const canonicalKeys = data.side === "FRONT"
+            ? ["idNumber", "fullName", "dateOfBirth", "gender", "nationality", "placeOfOrigin", "placeOfResidence", "expiryDate"]
+            : ["personalFeatures", "issueDate", "issueAuthority", "mrz"];
+
+        canonicalKeys.forEach(key => {
+            const field = fields[key];
+            if (!field) return;
+
             const tr = document.createElement("tr");
 
             // Label & Raw
@@ -225,13 +232,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${field.raw_text ? `<div class="field-raw">Gốc: ${escapeHtml(field.raw_text)}</div>` : ''}
             `;
 
-            // Value
+            // Value & Validation Warning
             const tdVal = document.createElement("td");
             tdVal.className = "field-value";
             if (field.value) {
-                tdVal.textContent = field.value;
+                tdVal.innerHTML = `
+                    <div>${escapeHtml(field.value)}</div>
+                    ${field.validation_message ? `<div style="font-size: 11px; color: #d97706; margin-top: 3px;">⚠️ ${escapeHtml(field.validation_message)}</div>` : ''}
+                `;
             } else {
-                tdVal.innerHTML = `<span style="color: #94a3b8;">—</span>`;
+                tdVal.innerHTML = `
+                    <span style="color: #94a3b8;">—</span>
+                    ${field.validation_message ? `<div style="font-size: 11px; color: #94a3b8; margin-top: 3px;">${escapeHtml(field.validation_message)}</div>` : ''}
+                `;
             }
 
             // Confidence
@@ -253,8 +266,12 @@ document.addEventListener("DOMContentLoaded", () => {
             // Status Badge
             const tdStatus = document.createElement("td");
             const statusLabels = {
+                EXTRACTED: "HỢP LỆ",
                 VALID: "HỢP LỆ",
+                NEEDS_REVIEW: "CẦN XEM LẠI",
+                MISSING: "CHƯA THẤY",
                 NOT_DETECTED: "CHƯA THẤY",
+                INVALID: "KHÔNG HỢP LỆ",
                 UNREADABLE: "KHÔNG RÕ",
             };
             const labelText = statusLabels[field.status] || field.status;
@@ -265,7 +282,7 @@ document.addEventListener("DOMContentLoaded", () => {
             tr.appendChild(tdConf);
             tr.appendChild(tdStatus);
             fieldsTbody.appendChild(tr);
-        }
+        });
 
         // Render Raw Detections
         rawDetectionsList.innerHTML = "";

@@ -1,0 +1,178 @@
+{
+  "dataset_path": "tests/fixtures/ground_truth_sample.json",
+  "mode": "all",
+  "preprocess_enabled": true,
+  "total_samples": 8,
+  "synthetic_count": 7,
+  "image_count": 1,
+  "model_init_time_ms": 4442.0,
+  "field_metrics": {
+    "id_number": {
+      "samples": 6,
+      "exact_match_count": 6,
+      "exact_match_rate": 1.0,
+      "missing_rate": 0.0,
+      "invalid_rate": 0.0,
+      "average_cer": 0.0
+    },
+    "full_name": {
+      "samples": 7,
+      "exact_match_count": 6,
+      "exact_match_rate": 0.8571,
+      "missing_rate": 0.0,
+      "invalid_rate": 0.0,
+      "average_cer": 0.0306
+    },
+    "date_of_birth": {
+      "samples": 6,
+      "exact_match_count": 6,
+      "exact_match_rate": 1.0,
+      "missing_rate": 0.0,
+      "invalid_rate": 0.0,
+      "average_cer": 0.0
+    },
+    "gender": {
+      "samples": 5,
+      "exact_match_count": 5,
+      "exact_match_rate": 1.0,
+      "missing_rate": 0.0,
+      "invalid_rate": 0.0,
+      "average_cer": 0.0
+    },
+    "nationality": {
+      "samples": 5,
+      "exact_match_count": 5,
+      "exact_match_rate": 1.0,
+      "missing_rate": 0.0,
+      "invalid_rate": 0.0,
+      "average_cer": 0.0
+    },
+    "place_of_origin": {
+      "samples": 5,
+      "exact_match_count": 4,
+      "exact_match_rate": 0.8,
+      "missing_rate": 0.0,
+      "invalid_rate": 0.0,
+      "average_cer": 0.0324
+    },
+    "place_of_residence": {
+      "samples": 5,
+      "exact_match_count": 4,
+      "exact_match_rate": 0.8,
+      "missing_rate": 0.0,
+      "invalid_rate": 0.0,
+      "average_cer": 0.0486
+    },
+    "expiry_date": {
+      "samples": 5,
+      "exact_match_count": 5,
+      "exact_match_rate": 1.0,
+      "missing_rate": 0.0,
+      "invalid_rate": 0.0,
+      "average_cer": 0.0
+    },
+    "personal_features": {
+      "samples": 1,
+      "exact_match_count": 1,
+      "exact_match_rate": 1.0,
+      "missing_rate": 0.0,
+      "invalid_rate": 0.0,
+      "average_cer": 0.0
+    },
+    "issue_date": {
+      "samples": 1,
+      "exact_match_count": 1,
+      "exact_match_rate": 1.0,
+      "missing_rate": 0.0,
+      "invalid_rate": 0.0,
+      "average_cer": 0.0
+    },
+    "issue_authority": {
+      "samples": 1,
+      "exact_match_count": 1,
+      "exact_match_rate": 1.0,
+      "missing_rate": 0.0,
+      "invalid_rate": 0.0,
+      "average_cer": 0.0
+    }
+  },
+  "quality_categories": {
+    "high_quality_studio": {
+      "total": 3,
+      "passed": 2,
+      "success_rate": 0.6667
+    },
+    "natural_mobile": {
+      "total": 1,
+      "passed": 1,
+      "success_rate": 1.0
+    },
+    "challenging_concatenated": {
+      "total": 1,
+      "passed": 1,
+      "success_rate": 1.0
+    },
+    "malformed_boundary": {
+      "total": 2,
+      "passed": 2,
+      "success_rate": 1.0
+    },
+    "multiline_dense": {
+      "total": 1,
+      "passed": 1,
+      "success_rate": 1.0
+    }
+  },
+  "error_analysis": [
+    {
+      "sample_id": "IMG_CCCD_FRONT_SPECIMEN_01",
+      "field": "full_name",
+      "expected": "NGUYỄN VĂN MẪU",
+      "actual": "NGUYEN VAN MAU",
+      "status": "EXTRACTED",
+      "cer": 0.2143,
+      "cause": "EXTRACTION_VALUE_MISMATCH"
+    },
+    {
+      "sample_id": "IMG_CCCD_FRONT_SPECIMEN_01",
+      "field": "place_of_origin",
+      "expected": "Xã Kim Sơn, Huyện Gia Lâm, TP. Hà Nội",
+      "actual": "Xa Kim Son, Huyén Gia Lam, TP. Ha Ni",
+      "status": "EXTRACTED",
+      "cer": 0.1622,
+      "cause": "NORMALIZATION_MISMATCH"
+    },
+    {
+      "sample_id": "IMG_CCCD_FRONT_SPECIMEN_01",
+      "field": "place_of_residence",
+      "expected": "Số 45 Đường Giải Phóng, Phường Đồng Tâm, Quận Hai Bà Trưng, TP. Hà Nội",
+      "actual": "Só 45 Dung Giái Phóng, Phu'ng Döng Tám, Quan Hai Ba Tru'ng, TP.Ha Noi",
+      "status": "EXTRACTED",
+      "cer": 0.2429,
+      "cause": "EXTRACTION_VALUE_MISMATCH"
+    }
+  ],
+  "latency_stats": {
+    "extraction_mean_ms": 0.65,
+    "extraction_median_ms": 0.3,
+    "inference_mean_ms": 1909.46,
+    "inference_median_ms": 1909.46,
+    "total_mean_ms": 239.33,
+    "total_median_ms": 0.3,
+    "total_min_ms": 0.12,
+    "total_max_ms": 1910.07
+  },
+  "card_cer_list": [
+    0.25793650793650796
+  ],
+  "overall": {
+    "total_fields": 47,
+    "exact_match_fields": 44,
+    "exact_match_rate": 0.9362,
+    "missing_fields": 0,
+    "missing_rate": 0.0,
+    "invalid_fields": 0,
+    "invalid_rate": 0.0,
+    "average_cer": 0.0132
+  }
+}

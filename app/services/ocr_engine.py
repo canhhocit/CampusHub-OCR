@@ -26,6 +26,52 @@ class PaddleOCREngine(BaseOCREngine):
             )
         return self._ocr
 
+    @staticmethod
+    def sort_detections_in_reading_order(detections: list[RawDetection]) -> list[RawDetection]:
+        if not detections:
+            return []
+        has_boxes = any(d.box is not None and len(d.box) >= 4 for d in detections)
+        if not has_boxes:
+            return detections
+
+        items = []
+        no_box_items = []
+        for d in detections:
+            if d.box and len(d.box) >= 4:
+                x_min = min(p[0] for p in d.box)
+                y_min = min(p[1] for p in d.box)
+                y_max = max(p[1] for p in d.box)
+                h = max(y_max - y_min, 1.0)
+                y_center = (y_min + y_max) / 2.0
+                items.append((y_center, x_min, h, d))
+            else:
+                no_box_items.append(d)
+
+        # Sort by y_center
+        items.sort(key=lambda it: it[0])
+        lines: list[list[tuple[float, float, float, RawDetection]]] = []
+        for it in items:
+            y_c, x_m, h, d = it
+            placed = False
+            for line in lines:
+                avg_y = sum(x[0] for x in line) / len(line)
+                avg_h = sum(x[2] for x in line) / len(line)
+                threshold = max(0.55 * min(avg_h, h), 8.0)
+                if abs(y_c - avg_y) <= threshold:
+                    line.append(it)
+                    placed = True
+                    break
+            if not placed:
+                lines.append([it])
+
+        sorted_res = []
+        for line in lines:
+            line.sort(key=lambda it: it[1])
+            for it in line:
+                sorted_res.append(it[3])
+
+        return sorted_res + no_box_items
+
     def detect_and_recognize(self, image: np.ndarray) -> list[RawDetection]:
         ocr = self._get_ocr()
         # PaddleOCR expects BGR or RGB image
@@ -40,7 +86,6 @@ class PaddleOCREngine(BaseOCREngine):
                 continue
             box, (text, conf) = line[0], line[1]
             if text and text.strip():
-                # Convert box coordinates to float list
                 box_coords = [[float(pt[0]), float(pt[1])] for pt in box] if box else None
                 detections.append(
                     RawDetection(
@@ -50,9 +95,7 @@ class PaddleOCREngine(BaseOCREngine):
                     )
                 )
                 
-        # Sort reading order: primary by Y (top-to-bottom), secondary by X (left-to-right)
-        detections.sort(key=lambda d: (d.box[0][1] if d.box else 0, d.box[0][0] if d.box else 0))
-        return detections
+        return self.sort_detections_in_reading_order(detections)
 
 class MockOCREngine(BaseOCREngine):
     """Deterministic mock OCR engine for automated testing and benchmarking."""

@@ -1,8 +1,10 @@
 [
   {
     "id": "SYNTH_CCCD_FRONT_01",
+    "data_type": "synthetic",
     "quality_category": "high_quality_studio",
     "side": "FRONT",
+    "image_path": null,
     "ground_truth": {
       "id_number": "001200000001",
       "full_name": "NGUYỄN VĂN AN",
@@ -13,6 +15,17 @@
       "place_of_residence": "Phòng 302 KTX Đại học Bách Khoa, Hai Bà Trưng, Hà Nội",
       "expiry_date": "15/08/2027"
     },
+    "expected_statuses": {
+      "id_number": "EXTRACTED",
+      "full_name": "EXTRACTED",
+      "date_of_birth": "EXTRACTED",
+      "gender": "EXTRACTED",
+      "nationality": "EXTRACTED",
+      "place_of_origin": "EXTRACTED",
+      "place_of_residence": "EXTRACTED",
+      "expiry_date": "EXTRACTED"
+    },
+    "ground_truth_text": "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\nĐộc lập - Tự do - Hạnh phúc\nCĂN CƯỚC CÔNG DÂN\nSố / No.: 001200000001\nHọ và tên / Full name:\nNGUYỄN VĂN AN\nNgày sinh / Date of birth: 15/08/2002\nGiới tính / Sex: Nam\nQuốc tịch / Nationality: Việt Nam\nQuê quán / Place of origin:\nXã Hải Tân, Huyện Hải Hậu, Tỉnh Nam Định\nNơi thường trú / Place of residence:\nPhòng 302 KTX Đại học Bách Khoa, Hai Bà Trưng, Hà Nội\nCó giá trị đến / Date of expiry: 15/08/2027",
     "ocr_detections": [
       {"text": "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "confidence": 0.99},
       {"text": "Độc lập - Tự do - Hạnh phúc", "confidence": 0.98},
@@ -32,8 +45,10 @@
   },
   {
     "id": "SYNTH_CCCD_FRONT_02",
+    "data_type": "synthetic",
     "quality_category": "natural_mobile",
     "side": "FRONT",
+    "image_path": null,
     "ground_truth": {
       "id_number": "079301000002",
       "full_name": "TRẦN THỊ MAI",
@@ -44,6 +59,17 @@
       "place_of_residence": "123 Nguyễn Thị Minh Khai, Phường 6, Quận 3, TP. Hồ Chí Minh",
       "expiry_date": "Không thời hạn"
     },
+    "expected_statuses": {
+      "id_number": "EXTRACTED",
+      "full_name": "EXTRACTED",
+      "date_of_birth": "EXTRACTED",
+      "gender": "EXTRACTED",
+      "nationality": "EXTRACTED",
+      "place_of_origin": "EXTRACTED",
+      "place_of_residence": "EXTRACTED",
+      "expiry_date": "EXTRACTED"
+    },
+    "ground_truth_text": "CĂN CƯỚC CÔNG DÂN\nSố / No: 079301000002\nHọ và tên / Full name:\nTRẦN THỊ MAI\nNgày sinh: 20/11/2001\nGiới tính: Nữ   Quốc tịch: Việt Nam\nQuê quán:\nPhường Bến Nghé, Quận 1, TP. Hồ Chí Minh\nNơi thường trú:\n123 Nguyễn Thị Minh Khai, Phường 6, Quận 3, TP. Hồ Chí Minh\nCó giá trị đến: Không thời hạn",
     "ocr_detections": [
       {"text": "CĂN CƯỚC CÔNG DÂN", "confidence": 0.97},
       {"text": "Số / No: 079301000002", "confidence": 0.98},
@@ -60,13 +86,21 @@
   },
   {
     "id": "SYNTH_CCCD_BACK_01",
+    "data_type": "synthetic",
     "quality_category": "high_quality_studio",
     "side": "BACK",
+    "image_path": null,
     "ground_truth": {
       "personal_features": "Nốt ruồi cách 1cm dưới sau đuôi lông mày phải",
       "issue_date": "10/05/2021",
       "issue_authority": "CỤC TRƯỞNG CỤC CẢNH SÁT QUẢN LÝ HÀNH CHÍNH VỀ TRẬT TỰ XÃ HỘI"
     },
+    "expected_statuses": {
+      "personal_features": "EXTRACTED",
+      "issue_date": "EXTRACTED",
+      "issue_authority": "EXTRACTED"
+    },
+    "ground_truth_text": "ĐẶC ĐIỂM NHÂN DẠNG / PERSONAL IDENTIFICATION\nNốt ruồi cách 1cm dưới sau đuôi lông mày phải\nHà Nội, ngày 10 tháng 05 năm 2021\nCỤC TRƯỞNG CỤC CẢNH SÁT QUẢN LÝ HÀNH CHÍNH VỀ TRẬT TỰ XÃ HỘI\nI<VNM0012000000018<<<<<<<<<<<\n0208154M2708152VNM<<<<<<<<<<<8\nNGUYEN<<VAN<AN<<<<<<<<<<<<<<<",
     "ocr_detections": [
       {"text": "ĐẶC ĐIỂM NHÂN DẠNG / PERSONAL IDENTIFICATION", "confidence": 0.98},
       {"text": "Nốt ruồi cách 1cm dưới sau đuôi lông mày phải", "confidence": 0.97},
@@ -76,5 +110,164 @@
       {"text": "0208154M2708152VNM<<<<<<<<<<<8", "confidence": 0.95},
       {"text": "NGUYEN<<VAN<AN<<<<<<<<<<<<<<<", "confidence": 0.97}
     ]
+  },
+  {
+    "id": "SYNTH_CCCD_FRONT_03_CHALLENGE",
+    "data_type": "synthetic",
+    "quality_category": "challenging_concatenated",
+    "side": "FRONT",
+    "image_path": null,
+    "ground_truth": {
+      "id_number": "036205013225",
+      "full_name": "PHAM HU'U CANH",
+      "date_of_birth": "26/06/2005",
+      "gender": "Nam",
+      "nationality": "Việt Nam",
+      "place_of_origin": "Yen Tho,Y YenNam Dinh",
+      "place_of_residence": "Thön ThanhBinh, Yen ThoY YenNam Dinh",
+      "expiry_date": "26/06/2030"
+    },
+    "expected_statuses": {
+      "id_number": "EXTRACTED",
+      "full_name": "EXTRACTED",
+      "date_of_birth": "EXTRACTED",
+      "gender": "EXTRACTED",
+      "nationality": "EXTRACTED",
+      "place_of_origin": "EXTRACTED",
+      "place_of_residence": "EXTRACTED",
+      "expiry_date": "EXTRACTED"
+    },
+    "ground_truth_text": "CONG HOA XAHOI CHU NGHiAVIET NAM\nSOCIALISTREPUBLICOFVIETNAM\nCAN CU'O'C CONG DAN\nCitizen ldentity Card\ns6/No036205013225\nHova ten/ Full name.\nPHAM HU'U CANH\nNgay sinh/Date of birth26/06/2005\nGioi tinh/SexNamQuoc tich/NationalityViet Nam\nQuequan / Place of onigin\nYen Tho,Y YenNam Dinh\nNoi thung trul Place ofresidenceThön ThanhBinh\nCo giatrden26/06/2030\nYen ThoY YenNam Dinh\nDateofexpiry",
+    "ocr_detections": [
+      {"text": "CONG HOA XAHOI CHU NGHiAVIET NAM", "confidence": 0.96},
+      {"text": "SOCIALISTREPUBLICOFVIETNAM", "confidence": 0.95},
+      {"text": "CAN CU'O'C CONG DAN", "confidence": 0.97},
+      {"text": "Citizen ldentity Card", "confidence": 0.95},
+      {"text": "s6/No036205013225", "confidence": 0.98},
+      {"text": "Hova ten/ Full name.", "confidence": 0.96},
+      {"text": "PHAM HU'U CANH", "confidence": 0.99},
+      {"text": "Ngay sinh/Date of birth26/06/2005", "confidence": 0.97},
+      {"text": "Gioi tinh/SexNamQuoc tich/NationalityViet Nam", "confidence": 0.96},
+      {"text": "Quequan / Place of onigin", "confidence": 0.95},
+      {"text": "Yen Tho,Y YenNam Dinh", "confidence": 0.95},
+      {"text": "Noi thung trul Place ofresidenceThön ThanhBinh", "confidence": 0.95},
+      {"text": "Co giatrden26/06/2030", "confidence": 0.98},
+      {"text": "Yen ThoY YenNam Dinh", "confidence": 0.94},
+      {"text": "Dateofexpiry", "confidence": 0.93}
+    ]
+  },
+  {
+    "id": "SYNTH_CCCD_FRONT_04_NEGATIVE_MISSING",
+    "data_type": "synthetic",
+    "quality_category": "malformed_boundary",
+    "side": "FRONT",
+    "image_path": null,
+    "ground_truth": {
+      "full_name": "LÊ HOÀNG NAM",
+      "date_of_birth": "05/10/1999"
+    },
+    "expected_statuses": {
+      "id_number": "MISSING",
+      "full_name": "EXTRACTED",
+      "date_of_birth": "EXTRACTED"
+    },
+    "ground_truth_text": "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\nCĂN CƯỚC CÔNG DÂN\nHọ và tên: LÊ HOÀNG NAM\nNgày sinh: 05/10/1999",
+    "ocr_detections": [
+      {"text": "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "confidence": 0.98},
+      {"text": "CĂN CƯỚC CÔNG DÂN", "confidence": 0.97},
+      {"text": "Họ và tên: LÊ HOÀNG NAM", "confidence": 0.98},
+      {"text": "Ngày sinh: 05/10/1999", "confidence": 0.96}
+    ]
+  },
+  {
+    "id": "SYNTH_CCCD_FRONT_05_NEGATIVE_INVALID_DOB",
+    "data_type": "synthetic",
+    "quality_category": "malformed_boundary",
+    "side": "FRONT",
+    "image_path": null,
+    "ground_truth": {
+      "id_number": "001099000123",
+      "full_name": "VŨ THỊ HƯƠNG"
+    },
+    "expected_statuses": {
+      "id_number": "EXTRACTED",
+      "full_name": "EXTRACTED",
+      "date_of_birth": "INVALID"
+    },
+    "ground_truth_text": "CĂN CƯỚC CÔNG DÂN\nSố: 001099000123\nHọ và tên: VŨ THỊ HƯƠNG\nNgày sinh: 31/02/2005",
+    "ocr_detections": [
+      {"text": "CĂN CƯỚC CÔNG DÂN", "confidence": 0.98},
+      {"text": "Số: 001099000123", "confidence": 0.99},
+      {"text": "Họ và tên: VŨ THỊ HƯƠNG", "confidence": 0.97},
+      {"text": "Ngày sinh: 31/02/2005", "confidence": 0.95}
+    ]
+  },
+  {
+    "id": "SYNTH_CCCD_FRONT_06_MULTILINE_DENSE",
+    "data_type": "synthetic",
+    "quality_category": "multiline_dense",
+    "side": "FRONT",
+    "image_path": null,
+    "ground_truth": {
+      "id_number": "034200000789",
+      "full_name": "ĐẶNG MINH TUẤN",
+      "date_of_birth": "08/12/2000",
+      "gender": "Nam",
+      "nationality": "Việt Nam",
+      "place_of_origin": "Xã An Ninh, Huyện Quỳnh Phụ, Tỉnh Thái Bình",
+      "place_of_residence": "Thôn 4, Xã An Ninh, Huyện Quỳnh Phụ, Tỉnh Thái Bình",
+      "expiry_date": "08/12/2025"
+    },
+    "expected_statuses": {
+      "id_number": "EXTRACTED",
+      "full_name": "EXTRACTED",
+      "date_of_birth": "EXTRACTED",
+      "gender": "EXTRACTED",
+      "nationality": "EXTRACTED",
+      "place_of_origin": "EXTRACTED",
+      "place_of_residence": "EXTRACTED",
+      "expiry_date": "EXTRACTED"
+    },
+    "ground_truth_text": "CĂN CƯỚC CÔNG DÂN\nSố: 034200000789\nHọ và tên: ĐẶNG MINH TUẤN\nNgày sinh: 08/12/2000\nGiới tính: Nam   Quốc tịch: Việt Nam\nQuê quán: Xã An Ninh\nHuyện Quỳnh Phụ, Tỉnh Thái Bình\nNơi thường trú: Thôn 4\nXã An Ninh, Huyện Quỳnh Phụ, Tỉnh Thái Bình\nCó giá trị đến: 08/12/2025",
+    "ocr_detections": [
+      {"text": "CĂN CƯỚC CÔNG DÂN", "confidence": 0.98},
+      {"text": "Số: 034200000789", "confidence": 0.99},
+      {"text": "Họ và tên: ĐẶNG MINH TUẤN", "confidence": 0.98},
+      {"text": "Ngày sinh: 08/12/2000", "confidence": 0.97},
+      {"text": "Giới tính: Nam   Quốc tịch: Việt Nam", "confidence": 0.96},
+      {"text": "Quê quán: Xã An Ninh", "confidence": 0.95},
+      {"text": "Huyện Quỳnh Phụ, Tỉnh Thái Bình", "confidence": 0.95},
+      {"text": "Nơi thường trú: Thôn 4", "confidence": 0.95},
+      {"text": "Xã An Ninh, Huyện Quỳnh Phụ, Tỉnh Thái Bình", "confidence": 0.94},
+      {"text": "Có giá trị đến: 08/12/2025", "confidence": 0.98}
+    ]
+  },
+  {
+    "id": "IMG_CCCD_FRONT_SPECIMEN_01",
+    "data_type": "image",
+    "quality_category": "high_quality_studio",
+    "side": "FRONT",
+    "image_path": "tests/fixtures/images/specimen_cccd_front.png",
+    "ground_truth": {
+      "id_number": "001098012345",
+      "full_name": "NGUYỄN VĂN MẪU",
+      "date_of_birth": "12/03/1998",
+      "gender": "Nam",
+      "nationality": "Việt Nam",
+      "place_of_origin": "Xã Kim Sơn, Huyện Gia Lâm, TP. Hà Nội",
+      "place_of_residence": "Số 45 Đường Giải Phóng, Phường Đồng Tâm, Quận Hai Bà Trưng, TP. Hà Nội",
+      "expiry_date": "12/03/2038"
+    },
+    "expected_statuses": {
+      "id_number": "EXTRACTED",
+      "full_name": "EXTRACTED",
+      "date_of_birth": "EXTRACTED",
+      "gender": "EXTRACTED",
+      "nationality": "EXTRACTED",
+      "place_of_origin": "EXTRACTED",
+      "place_of_residence": "EXTRACTED",
+      "expiry_date": "EXTRACTED"
+    },
+    "ground_truth_text": "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\nĐộc lập - Tự do - Hạnh phúc\nCĂN CƯỚC CÔNG DÂN\nCitizen Identity Card\nTHẺ MẪU / SPECIMEN - TEST ONLY\nSố / No.: 001098012345\nHọ và tên / Full name: NGUYỄN VĂN MẪU\nNgày sinh / Date of birth: 12/03/1998\nGiới tính / Sex: Nam Quốc tịch / Nationality: Việt Nam\nQuê quán / Place of origin: Xã Kim Sơn, Huyện Gia Lâm, TP. Hà Nội\nNơi thường trú / Place of residence: Số 45 Đường Giải Phóng, Phường Đồng Tâm Quận Hai Bà Trưng, TP. Hà Nội\nCó giá trị đến / Date of expiry: 12/03/2038"
   }
 ]
