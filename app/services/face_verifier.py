@@ -209,15 +209,30 @@ class YuNetSFaceEngine(FaceEngineInterface):
         self.recognizer_path = recognizer_path or os.path.join(base_dir, settings.FACE_RECOGNIZER_MODEL)
         self.score_threshold = float(score_threshold if score_threshold is not None else settings.FACE_SCORE_THRESHOLD)
 
-        if not os.path.exists(self.detector_path):
-            raise FileNotFoundError(
-                f"Tệp mô hình YuNet không tồn tại tại: {self.detector_path}. "
-                f"Vui lòng tải từ OpenCV Zoo và lưu vào {base_dir}/."
+        if detector_path is not None:
+            if not os.path.exists(self.detector_path):
+                raise FileNotFoundError(
+                    f"Tệp mô hình YuNet không tồn tại tại: {self.detector_path}. "
+                    f"Vui lòng tải từ OpenCV Zoo và lưu vào {base_dir}/."
+                )
+        else:
+            self._ensure_model_file(
+                self.detector_path,
+                "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
+                "YuNet",
             )
-        if not os.path.exists(self.recognizer_path):
-            raise FileNotFoundError(
-                f"Tệp mô hình SFace không tồn tại tại: {self.recognizer_path}. "
-                f"Vui lòng tải từ OpenCV Zoo và lưu vào {base_dir}/."
+
+        if recognizer_path is not None:
+            if not os.path.exists(self.recognizer_path):
+                raise FileNotFoundError(
+                    f"Tệp mô hình SFace không tồn tại tại: {self.recognizer_path}. "
+                    f"Vui lòng tải từ OpenCV Zoo và lưu vào {base_dir}/."
+                )
+        else:
+            self._ensure_model_file(
+                self.recognizer_path,
+                "https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
+                "SFace",
             )
 
         # Initialize detector with default shape (will update per image)
@@ -230,6 +245,23 @@ class YuNetSFaceEngine(FaceEngineInterface):
             top_k=5000,
         )
         self._recognizer = cv2.FaceRecognizerSF.create(self.recognizer_path, "")
+
+    @staticmethod
+    def _ensure_model_file(model_path: str, url: str, model_name: str) -> None:
+        """Verifies model exists, attempting auto-download from OpenCV Zoo if missing."""
+        if os.path.exists(model_path) and os.path.getsize(model_path) > 1000:
+            return
+        base_dir = os.path.dirname(model_path)
+        os.makedirs(base_dir, exist_ok=True)
+        try:
+            import urllib.request
+            urllib.request.urlretrieve(url, model_path)
+        except Exception as e:
+            if not os.path.exists(model_path) or os.path.getsize(model_path) == 0:
+                raise FileNotFoundError(
+                    f"Tệp mô hình {model_name} không tồn tại tại: {model_path}. "
+                    f"Vui lòng tải từ OpenCV Zoo ({url}) và lưu vào {base_dir}/. Lỗi tải: {e}"
+                )
 
     def set_score_threshold(self, score_threshold: float) -> None:
         """Dynamically reconfigures YuNet score threshold at runtime."""
