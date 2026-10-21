@@ -1,0 +1,80 @@
+[
+  {
+    "id": "SYNTH_CCCD_FRONT_01",
+    "quality_category": "high_quality_studio",
+    "side": "FRONT",
+    "ground_truth": {
+      "id_number": "001200000001",
+      "full_name": "NGUYỄN VĂN AN",
+      "date_of_birth": "15/08/2002",
+      "gender": "Nam",
+      "nationality": "Việt Nam",
+      "place_of_origin": "Xã Hải Tân, Huyện Hải Hậu, Tỉnh Nam Định",
+      "place_of_residence": "Phòng 302 KTX Đại học Bách Khoa, Hai Bà Trưng, Hà Nội",
+      "expiry_date": "15/08/2027"
+    },
+    "ocr_detections": [
+      {"text": "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "confidence": 0.99},
+      {"text": "Độc lập - Tự do - Hạnh phúc", "confidence": 0.98},
+      {"text": "CĂN CƯỚC CÔNG DÂN", "confidence": 0.99},
+      {"text": "Số / No.: 001200000001", "confidence": 0.99},
+      {"text": "Họ và tên / Full name:", "confidence": 0.98},
+      {"text": "NGUYỄN VĂN AN", "confidence": 0.99},
+      {"text": "Ngày sinh / Date of birth: 15/08/2002", "confidence": 0.99},
+      {"text": "Giới tính / Sex: Nam", "confidence": 0.98},
+      {"text": "Quốc tịch / Nationality: Việt Nam", "confidence": 0.99},
+      {"text": "Quê quán / Place of origin:", "confidence": 0.97},
+      {"text": "Xã Hải Tân, Huyện Hải Hậu, Tỉnh Nam Định", "confidence": 0.96},
+      {"text": "Nơi thường trú / Place of residence:", "confidence": 0.98},
+      {"text": "Phòng 302 KTX Đại học Bách Khoa, Hai Bà Trưng, Hà Nội", "confidence": 0.95},
+      {"text": "Có giá trị đến / Date of expiry: 15/08/2027", "confidence": 0.99}
+    ]
+  },
+  {
+    "id": "SYNTH_CCCD_FRONT_02",
+    "quality_category": "natural_mobile",
+    "side": "FRONT",
+    "ground_truth": {
+      "id_number": "079301000002",
+      "full_name": "TRẦN THỊ MAI",
+      "date_of_birth": "20/11/2001",
+      "gender": "Nữ",
+      "nationality": "Việt Nam",
+      "place_of_origin": "Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh",
+      "place_of_residence": "123 Nguyễn Thị Minh Khai, Phường 6, Quận 3, TP. Hồ Chí Minh",
+      "expiry_date": "Không thời hạn"
+    },
+    "ocr_detections": [
+      {"text": "CĂN CƯỚC CÔNG DÂN", "confidence": 0.97},
+      {"text": "Số / No: 079301000002", "confidence": 0.98},
+      {"text": "Họ và tên / Full name:", "confidence": 0.96},
+      {"text": "TRẦN THỊ MAI", "confidence": 0.98},
+      {"text": "Ngày sinh: 20/11/2001", "confidence": 0.97},
+      {"text": "Giới tính: Nữ   Quốc tịch: Việt Nam", "confidence": 0.96},
+      {"text": "Quê quán:", "confidence": 0.95},
+      {"text": "Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh", "confidence": 0.94},
+      {"text": "Nơi thường trú:", "confidence": 0.95},
+      {"text": "123 Nguyễn Thị Minh Khai, Phường 6, Quận 3, TP. Hồ Chí Minh", "confidence": 0.93},
+      {"text": "Có giá trị đến: Không thời hạn", "confidence": 0.97}
+    ]
+  },
+  {
+    "id": "SYNTH_CCCD_BACK_01",
+    "quality_category": "high_quality_studio",
+    "side": "BACK",
+    "ground_truth": {
+      "personal_features": "Nốt ruồi cách 1cm dưới sau đuôi lông mày phải",
+      "issue_date": "10/05/2021",
+      "issue_authority": "CỤC TRƯỞNG CỤC CẢNH SÁT QUẢN LÝ HÀNH CHÍNH VỀ TRẬT TỰ XÃ HỘI"
+    },
+    "ocr_detections": [
+      {"text": "ĐẶC ĐIỂM NHÂN DẠNG / PERSONAL IDENTIFICATION", "confidence": 0.98},
+      {"text": "Nốt ruồi cách 1cm dưới sau đuôi lông mày phải", "confidence": 0.97},
+      {"text": "Hà Nội, ngày 10 tháng 05 năm 2021", "confidence": 0.98},
+      {"text": "CỤC TRƯỞNG CỤC CẢNH SÁT QUẢN LÝ HÀNH CHÍNH VỀ TRẬT TỰ XÃ HỘI", "confidence": 0.99},
+      {"text": "I<VNM0012000000018<<<<<<<<<<<", "confidence": 0.96},
+      {"text": "0208154M2708152VNM<<<<<<<<<<<8", "confidence": 0.95},
+      {"text": "NGUYEN<<VAN<AN<<<<<<<<<<<<<<<", "confidence": 0.97}
+    ]
+  }
+]

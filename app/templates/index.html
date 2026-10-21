@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_name }} — Công cụ Thử nghiệm OCR CCCD</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header class="app-header">
+        <div class="header-container">
+            <div class="logo-area">
+                <span class="badge-env">TESTING BENCHMARK</span>
+                <h1>{{ app_name }}</h1>
+            </div>
+            <div class="header-status" id="engineStatus">
+                <span class="status-indicator"></span> Đang kết nối API...
+            </div>
+        </div>
+    </header>
+
+    <main class="main-container">
+        <!-- Privacy & Testing Notice -->
+        <div class="notice-banner">
+            <div class="notice-icon">⚠️</div>
+            <div class="notice-content">
+                <strong>Lưu ý Bảo mật & Thử nghiệm:</strong> {{ disclaimer }}
+                <div class="sub-notice">Hệ thống xử lý trực tiếp trong bộ nhớ tạm (in-memory) và xóa ngay sau khi phân tích. Không lưu trữ ảnh lên máy chủ.</div>
+            </div>
+        </div>
+
+        <div class="grid-layout">
+            <!-- Left Panel: Input & Preview -->
+            <section class="panel upload-panel">
+                <div class="panel-header">
+                    <h2>1. Tải ảnh & Tùy chọn</h2>
+                    <button type="button" id="resetBtn" class="btn-text" style="display: none;">Làm mới</button>
+                </div>
+
+                <!-- Dropzone / File input -->
+                <div class="dropzone" id="dropzone">
+                    <input type="file" id="fileInput" accept="image/jpeg,image/png,image/jpg" style="display: none;">
+                    <div class="dropzone-content" id="dropzonePrompt">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                            <polyline points="21 15 16 10 5 21"></polyline>
+                        </svg>
+                        <p class="dropzone-title">Nhấn để chọn ảnh hoặc kéo thả vào đây</p>
+                        <p class="dropzone-hint">Hỗ trợ JPG, JPEG, PNG (Tối đa 10 MB)</p>
+                    </div>
+
+                    <!-- Image Preview -->
+                    <div class="preview-container" id="previewContainer" style="display: none;">
+                        <img id="imagePreview" alt="Xem trước CCCD">
+                        <div class="image-meta" id="imageMeta"></div>
+                    </div>
+                </div>
+
+                <!-- Options -->
+                <div class="form-group">
+                    <label for="sideSelect">Mặt thẻ cần nhận diện:</label>
+                    <select id="sideSelect" class="form-control">
+                        <option value="AUTO" selected>Tự động nhận diện (Khuyến nghị)</option>
+                        <option value="FRONT">Mặt trước (Thông tin nhân thân & Số CCCD)</option>
+                        <option value="BACK">Mặt sau (Đặc điểm nhân dạng, ngày cấp, MRZ)</option>
+                    </select>
+                </div>
+
+                <div class="form-checkbox">
+                    <input type="checkbox" id="preprocessCheck" checked>
+                    <label for="preprocessCheck">Kích hoạt tiền xử lý nâng cao (Khử nhiễu, cân bằng tương phản)</label>
+                </div>
+
+                <!-- Action Button -->
+                <button type="button" id="submitBtn" class="btn btn-primary" disabled>
+                    <span class="btn-text-label">Bắt đầu Trích xuất OCR</span>
+                    <span class="btn-spinner" style="display: none;"></span>
+                </button>
+
+                <!-- Processing stats badge -->
+                <div class="stats-badge" id="statsBadge" style="display: none;">
+                    <span>⏱️ Thời gian xử lý: <strong id="latencyMs">0</strong> ms</span>
+                    <span>🏷️ Mặt thẻ: <strong id="detectedSide">-</strong></span>
+                </div>
+            </section>
+
+            <!-- Right Panel: Extraction Results -->
+            <section class="panel results-panel">
+                <div class="panel-header">
+                    <h2>2. Kết quả Trích xuất Dữ liệu</h2>
+                    <div class="tabs">
+                        <button type="button" class="tab-btn active" data-tab="structured">Dữ liệu Cấu trúc</button>
+                        <button type="button" class="tab-btn" data-tab="raw">Ký tự thô & Confidence</button>
+                    </div>
+                </div>
+
+                <!-- Initial Empty State -->
+                <div class="empty-state" id="emptyState">
+                    <div class="empty-icon">📄</div>
+                    <p class="empty-title">Chưa có kết quả trích xuất</p>
+                    <p class="empty-desc">Tải ảnh thẻ Căn cước công dân và nhấn "Bắt đầu Trích xuất OCR" để phân tích.</p>
+                </div>
+
+                <!-- Error State -->
+                <div class="alert alert-error" id="errorBox" style="display: none;"></div>
+
+                <!-- Warnings State -->
+                <div class="alert alert-warning" id="warningBox" style="display: none;"></div>
+
+                <!-- Tab 1: Structured Fields -->
+                <div class="tab-content" id="tabStructured" style="display: none;">
+                    <div class="fields-table-container">
+                        <table class="fields-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 32%;">Trường dữ liệu</th>
+                                    <th>Giá trị trích xuất</th>
+                                    <th style="width: 18%;">Độ tin cậy</th>
+                                    <th style="width: 15%;">Trạng thái</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fieldsTbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tab 2: Raw Detections -->
+                <div class="tab-content" id="tabRaw" style="display: none;">
+                    <div class="raw-actions">
+                        <span id="rawCountLabel">0 đoạn văn bản được phát hiện</span>
+                        <button type="button" id="copyRawBtn" class="btn-sm">Sao chép văn bản</button>
+                    </div>
+                    <div class="raw-detections-list" id="rawDetectionsList"></div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer class="app-footer">
+        <p>CampusHub-OCR Benchmark & Testing Bench — Bản quyền © 2026 Phạm Hữu Cảnh</p>
+    </footer>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
