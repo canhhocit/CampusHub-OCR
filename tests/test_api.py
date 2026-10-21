@@ -16,6 +16,11 @@ def test_index_ui_endpoint(client):
     assert "text/html" in response.headers["content-type"]
     assert "CampusHub-OCR" in response.text
     assert "Bắt đầu Trích xuất OCR" in response.text
+    assert "So khớp Khuôn mặt 1:1" in response.text
+    assert "faceCardFileInput" in response.text
+    assert "selfieFileInput" in response.text
+    assert "openWebcamBtn" in response.text
+    assert "submitFaceBtn" in response.text
 
 def test_ocr_endpoint_validation_error_on_empty(client):
     response = client.post(

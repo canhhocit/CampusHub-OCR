@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ app_name }} — Công cụ Thử nghiệm OCR CCCD</title>
+    <title>{{ app_name }} — Công cụ Thử nghiệm OCR & Xác minh Khuôn mặt CCCD</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -13,8 +13,13 @@
                 <span class="badge-env">TESTING BENCHMARK</span>
                 <h1>{{ app_name }}</h1>
             </div>
-            <div class="header-status" id="engineStatus">
-                <span class="status-indicator"></span> Đang kết nối API...
+            <div class="header-statuses">
+                <div class="header-status" id="ocrEngineStatus">
+                    <span class="status-indicator"></span> OCR: Đang kết nối...
+                </div>
+                <div class="header-status" id="faceEngineStatus">
+                    <span class="status-indicator"></span> Face: Đang kết nối...
+                </div>
             </div>
         </div>
     </header>
@@ -22,118 +27,368 @@
     <main class="main-container">
         <!-- Privacy & Testing Notice -->
         <div class="notice-banner">
-            <div class="notice-icon">⚠️</div>
+            <div class="notice-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+            </div>
             <div class="notice-content">
                 <strong>Lưu ý Bảo mật & Thử nghiệm:</strong> {{ disclaimer }}
-                <div class="sub-notice">Hệ thống xử lý trực tiếp trong bộ nhớ tạm (in-memory) và xóa ngay sau khi phân tích. Không lưu trữ ảnh lên máy chủ.</div>
+                <div class="sub-notice">Hệ thống xử lý trực tiếp trong bộ nhớ tạm (in-memory) và tự giải phóng ngay sau khi xử lý. Không lưu trữ ảnh, vector embedding hay thông tin cá nhân lên đĩa máy chủ.</div>
             </div>
         </div>
 
-        <div class="grid-layout">
-            <!-- Left Panel: Input & Preview -->
-            <section class="panel upload-panel">
-                <div class="panel-header">
-                    <h2>1. Tải ảnh & Tùy chọn</h2>
-                    <button type="button" id="resetBtn" class="btn-text" style="display: none;">Làm mới</button>
-                </div>
+        <!-- Mode Navigation Switcher -->
+        <nav class="mode-navigation" aria-label="Chuyển chế độ thử nghiệm">
+            <button type="button" class="mode-tab-btn active" id="modeBtnOcr" data-mode="ocr">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                    <line x1="7" y1="8" x2="17" y2="8"></line>
+                    <line x1="7" y1="12" x2="13" y2="12"></line>
+                    <line x1="7" y1="16" x2="11" y2="16"></line>
+                </svg>
+                <span>1. Trích xuất OCR Thẻ CCCD</span>
+            </button>
+            <button type="button" class="mode-tab-btn" id="modeBtnFace" data-mode="face">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="10" r="4"></circle>
+                    <path d="M6 20v-1a6 6 0 0 1 12 0v1"></path>
+                    <rect x="2" y="2" width="20" height="20" rx="3" stroke-dasharray="2 2"></rect>
+                </svg>
+                <span>2. So khớp Khuôn mặt 1:1 (Face Verification)</span>
+            </button>
+        </nav>
 
-                <!-- Dropzone / File input -->
-                <div class="dropzone" id="dropzone">
-                    <input type="file" id="fileInput" accept="image/jpeg,image/png,image/jpg" style="display: none;">
-                    <div class="dropzone-content" id="dropzonePrompt">
-                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                            <polyline points="21 15 16 10 5 21"></polyline>
-                        </svg>
-                        <p class="dropzone-title">Nhấn để chọn ảnh hoặc kéo thả vào đây</p>
-                        <p class="dropzone-hint">Hỗ trợ JPG, JPEG, PNG (Tối đa 10 MB)</p>
+        <!-- ================= MODE 1: OCR SECTION ================= -->
+        <div class="mode-view active" id="viewOcr">
+            <div class="grid-layout">
+                <!-- Left Panel: Input & Preview -->
+                <section class="panel upload-panel">
+                    <div class="panel-header">
+                        <h2>1. Tải ảnh & Tùy chọn OCR</h2>
+                        <button type="button" id="resetBtn" class="btn-text" style="display: none;">Làm mới</button>
                     </div>
 
-                    <!-- Image Preview -->
-                    <div class="preview-container" id="previewContainer" style="display: none;">
-                        <img id="imagePreview" alt="Xem trước CCCD">
-                        <div class="image-meta" id="imageMeta"></div>
+                    <!-- Dropzone / File input -->
+                    <div class="dropzone" id="dropzone">
+                        <input type="file" id="fileInput" accept="image/jpeg,image/png,image/jpg" style="display: none;">
+                        <div class="dropzone-content" id="dropzonePrompt">
+                            <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                <polyline points="21 15 16 10 5 21"></polyline>
+                            </svg>
+                            <p class="dropzone-title">Nhấn để chọn ảnh CCCD hoặc kéo thả vào đây</p>
+                            <p class="dropzone-hint">Hỗ trợ JPG, JPEG, PNG (Tối đa 10 MB)</p>
+                        </div>
+
+                        <!-- Image Preview -->
+                        <div class="preview-container" id="previewContainer" style="display: none;">
+                            <img id="imagePreview" alt="Xem trước CCCD">
+                            <div class="image-meta" id="imageMeta"></div>
+                        </div>
                     </div>
-                </div>
 
-                <!-- Options -->
-                <div class="form-group">
-                    <label for="sideSelect">Mặt thẻ cần nhận diện:</label>
-                    <select id="sideSelect" class="form-control">
-                        <option value="AUTO" selected>Tự động nhận diện (Khuyến nghị)</option>
-                        <option value="FRONT">Mặt trước (Thông tin nhân thân & Số CCCD)</option>
-                        <option value="BACK">Mặt sau (Đặc điểm nhân dạng, ngày cấp, MRZ)</option>
-                    </select>
-                </div>
-
-                <div class="form-checkbox">
-                    <input type="checkbox" id="preprocessCheck" checked>
-                    <label for="preprocessCheck">Kích hoạt tiền xử lý nâng cao (Khử nhiễu, cân bằng tương phản)</label>
-                </div>
-
-                <!-- Action Button -->
-                <button type="button" id="submitBtn" class="btn btn-primary" disabled>
-                    <span class="btn-text-label">Bắt đầu Trích xuất OCR</span>
-                    <span class="btn-spinner" style="display: none;"></span>
-                </button>
-
-                <!-- Processing stats badge -->
-                <div class="stats-badge" id="statsBadge" style="display: none;">
-                    <span>⏱️ Thời gian xử lý: <strong id="latencyMs">0</strong> ms</span>
-                    <span>🏷️ Mặt thẻ: <strong id="detectedSide">-</strong></span>
-                </div>
-            </section>
-
-            <!-- Right Panel: Extraction Results -->
-            <section class="panel results-panel">
-                <div class="panel-header">
-                    <h2>2. Kết quả Trích xuất Dữ liệu</h2>
-                    <div class="tabs">
-                        <button type="button" class="tab-btn active" data-tab="structured">Dữ liệu Cấu trúc</button>
-                        <button type="button" class="tab-btn" data-tab="raw">Ký tự thô & Confidence</button>
+                    <!-- Options -->
+                    <div class="form-group">
+                        <label for="sideSelect">Mặt thẻ cần nhận diện:</label>
+                        <select id="sideSelect" class="form-control">
+                            <option value="AUTO" selected>Tự động nhận diện (Khuyến nghị)</option>
+                            <option value="FRONT">Mặt trước (Thông tin nhân thân & Số CCCD)</option>
+                            <option value="BACK">Mặt sau (Đặc điểm nhân dạng, ngày cấp, MRZ)</option>
+                        </select>
                     </div>
-                </div>
 
-                <!-- Initial Empty State -->
-                <div class="empty-state" id="emptyState">
-                    <div class="empty-icon">📄</div>
-                    <p class="empty-title">Chưa có kết quả trích xuất</p>
-                    <p class="empty-desc">Tải ảnh thẻ Căn cước công dân và nhấn "Bắt đầu Trích xuất OCR" để phân tích.</p>
-                </div>
-
-                <!-- Error State -->
-                <div class="alert alert-error" id="errorBox" style="display: none;"></div>
-
-                <!-- Warnings State -->
-                <div class="alert alert-warning" id="warningBox" style="display: none;"></div>
-
-                <!-- Tab 1: Structured Fields -->
-                <div class="tab-content" id="tabStructured" style="display: none;">
-                    <div class="fields-table-container">
-                        <table class="fields-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 32%;">Trường dữ liệu</th>
-                                    <th>Giá trị trích xuất</th>
-                                    <th style="width: 18%;">Độ tin cậy</th>
-                                    <th style="width: 15%;">Trạng thái</th>
-                                </tr>
-                            </thead>
-                            <tbody id="fieldsTbody"></tbody>
-                        </table>
+                    <div class="form-checkbox">
+                        <input type="checkbox" id="preprocessCheck" checked>
+                        <label for="preprocessCheck">Kích hoạt tiền xử lý nâng cao (Khử nhiễu, cân bằng tương phản)</label>
                     </div>
-                </div>
 
-                <!-- Tab 2: Raw Detections -->
-                <div class="tab-content" id="tabRaw" style="display: none;">
-                    <div class="raw-actions">
-                        <span id="rawCountLabel">0 đoạn văn bản được phát hiện</span>
-                        <button type="button" id="copyRawBtn" class="btn-sm">Sao chép văn bản</button>
+                    <!-- Action Button -->
+                    <button type="button" id="submitBtn" class="btn btn-primary" disabled>
+                        <span class="btn-text-label">Bắt đầu Trích xuất OCR</span>
+                        <span class="btn-spinner" style="display: none;"></span>
+                    </button>
+
+                    <!-- Processing stats badge -->
+                    <div class="stats-badge" id="statsBadge" style="display: none;">
+                        <span>Thời gian xử lý: <strong id="latencyMs">0</strong> ms</span>
+                        <span>Mặt thẻ: <strong id="detectedSide">-</strong></span>
                     </div>
-                    <div class="raw-detections-list" id="rawDetectionsList"></div>
-                </div>
-            </section>
+                </section>
+
+                <!-- Right Panel: Extraction Results -->
+                <section class="panel results-panel">
+                    <div class="panel-header">
+                        <h2>2. Kết quả Trích xuất Dữ liệu</h2>
+                        <div class="tabs">
+                            <button type="button" class="tab-btn active" data-tab="structured">Dữ liệu Cấu trúc</button>
+                            <button type="button" class="tab-btn" data-tab="raw">Ký tự thô & Confidence</button>
+                        </div>
+                    </div>
+
+                    <!-- Initial Empty State -->
+                    <div class="empty-state" id="emptyState">
+                        <div class="empty-icon-svg">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                <polyline points="10 9 9 9 8 9"></polyline>
+                            </svg>
+                        </div>
+                        <p class="empty-title">Chưa có kết quả trích xuất</p>
+                        <p class="empty-desc">Tải ảnh thẻ Căn cước công dân và nhấn "Bắt đầu Trích xuất OCR" để phân tích.</p>
+                    </div>
+
+                    <!-- Error State -->
+                    <div class="alert alert-error" id="errorBox" style="display: none;"></div>
+
+                    <!-- Warnings State -->
+                    <div class="alert alert-warning" id="warningBox" style="display: none;"></div>
+
+                    <!-- Tab 1: Structured Fields -->
+                    <div class="tab-content" id="tabStructured" style="display: none;">
+                        <div class="fields-table-container">
+                            <table class="fields-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 32%;">Trường dữ liệu</th>
+                                        <th>Giá trị trích xuất</th>
+                                        <th style="width: 18%;">Độ tin cậy</th>
+                                        <th style="width: 15%;">Trạng thái</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fieldsTbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2: Raw Detections -->
+                    <div class="tab-content" id="tabRaw" style="display: none;">
+                        <div class="raw-actions">
+                            <span id="rawCountLabel">0 đoạn văn bản được phát hiện</span>
+                            <button type="button" id="copyRawBtn" class="btn-sm">Sao chép văn bản</button>
+                        </div>
+                        <div class="raw-detections-list" id="rawDetectionsList"></div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- ================= MODE 2: FACE VERIFICATION SECTION ================= -->
+        <div class="mode-view" id="viewFace" style="display: none;">
+            <div class="grid-layout">
+                <!-- Left Panel: Face Verification Inputs -->
+                <section class="panel upload-panel">
+                    <div class="panel-header">
+                        <h2>1. Ảnh Mặt trước CCCD & Ảnh Selfie</h2>
+                        <button type="button" id="resetFaceBtn" class="btn-text" style="display: none;">Làm mới tất cả</button>
+                    </div>
+
+                    <!-- Card Image Area for Face Matching -->
+                    <div class="input-block">
+                        <div class="input-block-header">
+                            <label class="block-label">A. Ảnh Mặt trước CCCD (chứa chân dung in)</label>
+                            <button type="button" id="useOcrCardBtn" class="btn-link" style="display: none;">Dùng ảnh từ tab OCR</button>
+                        </div>
+
+                        <div class="dropzone dropzone-compact" id="faceCardDropzone">
+                            <input type="file" id="faceCardFileInput" accept="image/jpeg,image/png,image/jpg" style="display: none;">
+                            <div class="dropzone-content" id="faceCardPrompt">
+                                <svg class="upload-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                </svg>
+                                <p class="dropzone-title-sm">Nhấn chọn ảnh mặt trước thẻ CCCD</p>
+                            </div>
+                            <div class="preview-container preview-compact" id="faceCardPreviewContainer" style="display: none;">
+                                <img id="faceCardPreview" alt="Xem trước ảnh thẻ">
+                                <div class="image-meta" id="faceCardMeta"></div>
+                                <button type="button" class="btn-change-image" id="changeCardFaceBtn">Thay ảnh thẻ</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Selfie Image Area -->
+                    <div class="input-block">
+                        <div class="input-block-header">
+                            <label class="block-label">B. Ảnh Chân dung Selfie</label>
+                            <div class="selfie-actions-bar">
+                                <button type="button" class="btn-sm" id="openWebcamBtn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                        <circle cx="12" cy="13" r="4"></circle>
+                                    </svg>
+                                    <span>Mở Webcam</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Dropzone for Selfie upload -->
+                        <div class="dropzone dropzone-compact" id="selfieDropzone">
+                            <input type="file" id="selfieFileInput" accept="image/jpeg,image/png,image/jpg" style="display: none;">
+                            <div class="dropzone-content" id="selfiePrompt">
+                                <svg class="upload-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="10" r="4"></circle>
+                                    <path d="M6 20v-1a6 6 0 0 1 12 0v1"></path>
+                                </svg>
+                                <p class="dropzone-title-sm">Nhấn tải tệp ảnh selfie hoặc kéo thả</p>
+                            </div>
+
+                            <!-- Selfie Preview -->
+                            <div class="preview-container preview-compact" id="selfiePreviewContainer" style="display: none;">
+                                <img id="selfiePreview" alt="Xem trước ảnh chân dung selfie">
+                                <div class="image-meta" id="selfieMeta"></div>
+                                <button type="button" class="btn-change-image" id="changeSelfieBtn">Thay ảnh selfie</button>
+                            </div>
+                        </div>
+
+                        <!-- Live Webcam View -->
+                        <div class="webcam-box" id="webcamBox" style="display: none;">
+                            <video id="webcamVideo" autoplay playsinline muted></video>
+                            <canvas id="webcamCanvas" style="display: none;"></canvas>
+                            <div class="webcam-controls">
+                                <button type="button" class="btn btn-primary btn-sm" id="captureWebcamBtn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="8"></circle>
+                                    </svg>
+                                    <span>Chụp ảnh ngay</span>
+                                </button>
+                                <button type="button" class="btn-text btn-sm" id="closeWebcamBtn">Đóng camera</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Threshold Setting -->
+                    <div class="form-group threshold-group">
+                        <div class="threshold-header">
+                            <label for="thresholdInput">Ngưỡng so khớp Cosine Similarity:</label>
+                            <span class="threshold-display" id="thresholdDisplay">0.363</span>
+                        </div>
+                        <input type="range" id="thresholdInput" min="0.10" max="0.80" step="0.01" value="0.363" class="threshold-slider">
+                        <div class="threshold-hint">
+                            Mặc định: <strong>0.363</strong> (Baseline đề xuất bởi OpenCV Zoo SFace trên LFW). Giá trị cao hơn yêu cầu độ tương đồng khắt khe hơn.
+                        </div>
+                    </div>
+
+                    <!-- Submit Verification Button -->
+                    <button type="button" id="submitFaceBtn" class="btn btn-primary" disabled>
+                        <span class="btn-text-label">So khớp khuôn mặt 1:1</span>
+                        <span class="btn-spinner" style="display: none;"></span>
+                    </button>
+                </section>
+
+                <!-- Right Panel: Face Verification Results -->
+                <section class="panel results-panel">
+                    <div class="panel-header">
+                        <h2>2. Kết quả Đối sánh Sinh trắc học</h2>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div class="empty-state" id="faceEmptyState">
+                        <div class="empty-icon-svg">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M8 15s1.5 2 4 2 4-2 4-2"></path>
+                                <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                                <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                            </svg>
+                        </div>
+                        <p class="empty-title">Chưa có kết quả so khớp</p>
+                        <p class="empty-desc">Tải ảnh mặt trước thẻ CCCD và ảnh selfie (hoặc chụp từ webcam), sau đó nhấn "So khớp khuôn mặt 1:1".</p>
+                    </div>
+
+                    <!-- Error State -->
+                    <div class="alert alert-error" id="faceErrorBox" style="display: none;"></div>
+
+                    <!-- Warnings State -->
+                    <div class="alert alert-warning" id="faceWarningBox" style="display: none;"></div>
+
+                    <!-- Main Verification Result Content -->
+                    <div class="face-result-content" id="faceResultContent" style="display: none;">
+                        <!-- Primary Decision Banner -->
+                        <div class="decision-card" id="decisionCard">
+                            <div class="decision-badge" id="decisionBadge">ĐỐI SÁNH KHỚP</div>
+                            <div class="decision-subtitle" id="decisionSubtitle">Khuôn mặt trên CCCD và ảnh selfie thuộc cùng một người</div>
+                        </div>
+
+                        <!-- Score Metrics Grid -->
+                        <div class="metrics-grid">
+                            <div class="metric-card">
+                                <div class="metric-title">Cosine Similarity</div>
+                                <div class="metric-value" id="resSimilarity">0.0000</div>
+                                <div class="metric-sub" id="resThresholdSub">Ngưỡng: 0.363</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-title">Điểm trực quan (Display Score)</div>
+                                <div class="metric-value" id="resConfidence">0%</div>
+                                <div class="metric-sub">Chuẩn hóa giao diện</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-title">Thời gian xử lý</div>
+                                <div class="metric-value" id="resLatency">0 ms</div>
+                                <div class="metric-sub">Thuần CPU (YuNet + SFace)</div>
+                            </div>
+                        </div>
+
+                        <!-- Image Quality Analysis Table -->
+                        <div class="quality-analysis-section">
+                            <h3 class="section-subtitle">Chất lượng Hình ảnh & Ranh giới Khuôn mặt</h3>
+                            <div class="fields-table-container">
+                                <table class="fields-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 25%;">Chỉ tiêu phân tích</th>
+                                            <th style="width: 37%;">Ảnh Thẻ CCCD (Portrait)</th>
+                                            <th style="width: 38%;">Ảnh Chân dung Selfie</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="qualityTbody">
+                                        <tr>
+                                            <td><strong>Phát hiện khuôn mặt</strong></td>
+                                            <td id="qCardDetected">—</td>
+                                            <td id="qSelfieDetected">—</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Kích thước vùng mặt</strong></td>
+                                            <td id="qCardSize">—</td>
+                                            <td id="qSelfieSize">—</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Độ sáng trung bình (0-255)</strong></td>
+                                            <td id="qCardBrightness">—</td>
+                                            <td id="qSelfieBrightness">—</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Độ sắc nét (Laplacian)</strong></td>
+                                            <td id="qCardBlur">—</td>
+                                            <td id="qSelfieBlur">—</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Tỷ lệ khung hình (w/h)</strong></td>
+                                            <td id="qCardAspect">—</td>
+                                            <td id="qSelfieAspect">—</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Đánh giá tiêu chuẩn</strong></td>
+                                            <td id="qCardStatus">—</td>
+                                            <td id="qSelfieStatus">—</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Disclaimer Box -->
+                        <div class="disclaimer-card" id="faceDisclaimerBox"></div>
+                    </div>
+                </section>
+            </div>
         </div>
     </main>
 

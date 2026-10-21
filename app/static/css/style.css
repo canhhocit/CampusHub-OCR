@@ -535,3 +535,318 @@ body {
     border-top: 1px solid var(--border);
     margin-top: 40px;
 }
+
+/* Header Statuses */
+.header-statuses {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.status-indicator.offline {
+    background-color: var(--danger);
+}
+
+.status-indicator.warning {
+    background-color: var(--warning);
+}
+
+/* Mode Navigation Switcher */
+.mode-navigation {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    background: #e2e8f0;
+    padding: 4px;
+    border-radius: var(--radius);
+    max-width: 600px;
+}
+
+.mode-tab-btn {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.mode-tab-btn:hover {
+    color: var(--text-main);
+}
+
+.mode-tab-btn.active {
+    background: var(--bg-card);
+    color: var(--primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.mode-view {
+    display: block;
+}
+
+/* Face Verification Dual Upload Blocks */
+.input-block {
+    margin-bottom: 18px;
+}
+
+.input-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.block-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.btn-link {
+    background: none;
+    border: none;
+    color: var(--primary);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+}
+
+.btn-link:hover {
+    color: var(--primary-hover);
+}
+
+.dropzone-compact {
+    padding: 18px 12px;
+    min-height: 130px;
+}
+
+.upload-icon-sm {
+    width: 28px;
+    height: 28px;
+    stroke: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.dropzone-title-sm {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.preview-compact img {
+    max-height: 140px;
+    width: auto;
+    object-fit: contain;
+}
+
+.btn-change-image {
+    margin-top: 6px;
+    background: #f1f5f9;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-main);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.btn-change-image:hover {
+    background: #e2e8f0;
+}
+
+/* Webcam Container */
+.webcam-box {
+    background: #000;
+    border-radius: var(--radius);
+    overflow: hidden;
+    position: relative;
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#webcamVideo {
+    width: 100%;
+    max-height: 240px;
+    object-fit: cover;
+    background: #000;
+}
+
+.webcam-controls {
+    display: flex;
+    gap: 8px;
+    padding: 10px;
+    background: #0f172a;
+    width: 100%;
+    justify-content: center;
+}
+
+/* Threshold Setting */
+.threshold-group {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+}
+
+.threshold-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.threshold-display {
+    font-family: monospace;
+    font-weight: 700;
+    color: var(--primary);
+    background: var(--primary-light);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.threshold-slider {
+    width: 100%;
+    cursor: pointer;
+}
+
+.threshold-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* Face Verification Decision Card */
+.decision-card {
+    text-align: center;
+    padding: 20px 16px;
+    border-radius: var(--radius);
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    margin-bottom: 20px;
+}
+
+.decision-badge {
+    display: inline-block;
+    font-size: 18px;
+    font-weight: 800;
+    padding: 6px 20px;
+    border-radius: 6px;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.decision-badge.match {
+    background: var(--success);
+    color: #ffffff;
+}
+
+.decision-badge.no-match {
+    background: var(--danger);
+    color: #ffffff;
+}
+
+.decision-badge.rejected {
+    background: var(--warning);
+    color: #ffffff;
+}
+
+.decision-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* Metrics Grid */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.metric-card {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    text-align: center;
+}
+
+.metric-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.metric-value {
+    font-size: 20px;
+    font-weight: 800;
+    font-family: monospace;
+    color: var(--text-main);
+    margin-bottom: 2px;
+}
+
+.metric-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* Quality Analysis Table */
+.quality-analysis-section {
+    margin-bottom: 24px;
+}
+
+.section-subtitle {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: 10px;
+}
+
+/* Disclaimer Card */
+.disclaimer-card {
+    background: #f8fafc;
+    border-left: 3px solid #94a3b8;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--text-muted);
+    border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.empty-icon-svg {
+    stroke: #94a3b8;
+    margin-bottom: 12px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+    .metrics-grid {
+        grid-template-columns: 1fr;
+    }
+    .mode-navigation {
+        max-width: 100%;
+    }
+    .header-statuses {
+        margin-top: 8px;
+    }
+}
+
