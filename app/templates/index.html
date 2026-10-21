@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ app_name }} — Công cụ Thử nghiệm OCR & Xác minh Khuôn mặt CCCD</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=1.3.0">
+    <link rel="stylesheet" href="/static/css/style.css?v=1.3.1">
 </head>
 <body>
     <header class="app-header">
         <div class="header-container">
             <div class="logo-area">
-                <span class="badge-env">TESTING BENCHMARK</span>
                 <h1>{{ app_name }}</h1>
+                <span class="badge-env">Thử nghiệm</span>
             </div>
             <div class="header-statuses">
                 <div class="header-status" id="ocrEngineStatus">
@@ -28,14 +28,14 @@
         <!-- Privacy & Testing Notice -->
         <div class="notice-banner">
             <div class="notice-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                    <line x1="12" y1="9" x2="12" y2="13"></line>
-                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
                 </svg>
             </div>
             <div class="notice-content">
-                <strong>Lưu ý Bảo mật & Thử nghiệm:</strong> {{ disclaimer }}
+                <strong>Lưu ý bảo mật & thử nghiệm:</strong> {{ disclaimer }}
                 <div class="sub-notice">Hệ thống xử lý trực tiếp trong bộ nhớ tạm (in-memory) và tự giải phóng ngay sau khi xử lý. Không lưu trữ ảnh, vector embedding hay thông tin cá nhân lên đĩa máy chủ.</div>
             </div>
         </div>
@@ -566,6 +566,6 @@
         <p>CampusHub-OCR Benchmark & Testing Bench — Bản quyền © 2026 Phạm Hữu Cảnh</p>
     </footer>
 
-    <script src="/static/js/app.js?v=1.3.0"></script>
+    <script src="/static/js/app.js?v=1.3.1"></script>
 </body>
 </html>
