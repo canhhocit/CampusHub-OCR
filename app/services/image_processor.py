@@ -83,22 +83,105 @@ class ImageProcessor:
         return image, metadata
 
     @staticmethod
-    def preprocess_for_ocr(image: np.ndarray) -> np.ndarray:
+    def deskew_image(image: np.ndarray, max_angle: float = 30.0) -> np.ndarray:
         """
-        Subtle preprocessing to improve text recognition without distorting cards.
-        PaddleOCR works effectively on RGB/BGR inputs, so we avoid destructive binarization.
+        Automatically straightens tilted or rotated cards (hand-held mobile captures).
+        Uses Otsu inverted binary thresholding + minAreaRect to estimate the skew angle.
+        Safety guard: only rotates if 0.7° <= |angle| <= max_angle, avoiding distortion
+        of already straight images. Returns original image on any failure.
         """
-        h, w = image.shape[:2]
+        try:
+            if image is None or image.size == 0:
+                return image
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+            blur = cv2.GaussianBlur(gray, (5, 5), 0)
+            _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+            
+            coords = np.column_stack(np.where(thresh > 0))
+            if coords.shape[0] < 50:
+                return image
+
+            angle = cv2.minAreaRect(coords)[-1]
+            if angle < -45:
+                angle = -(90 + angle)
+            else:
+                angle = -angle
+
+            # Safe rotation guard: skip small noise (<0.7 deg) or extreme angles (>max_angle)
+            if abs(angle) < 0.7 or abs(angle) > max_angle:
+                return image
+
+            h, w = image.shape[:2]
+            center = (w // 2, h // 2)
+            rot_mat = cv2.getRotationMatrix2D(center, angle, 1.0)
+            rotated = cv2.warpAffine(
+                image,
+                rot_mat,
+                (w, h),
+                flags=cv2.INTER_CUBIC,
+                borderMode=cv2.BORDER_REPLICATE
+            )
+            return rotated
+        except Exception:
+            return image
+
+    @staticmethod
+    def clean_shadows_and_contrast(image: np.ndarray) -> np.ndarray:
+        """
+        Removes uneven lighting/shadow gradients across card and equalizes contrast
+        using morphological dilation background estimation and cumulative histogram clipping.
+        Returns enhanced BGR/RGB image.
+        """
+        try:
+            if image is None or image.size == 0:
+                return image
+            is_color = len(image.shape) == 3
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if is_color else image.copy()
+
+            # Background estimation via dilation and median blur
+            dilated = cv2.dilate(gray, np.ones((7, 7), np.uint8))
+            bg = cv2.medianBlur(dilated, 21)
+            diff = 255 - cv2.absdiff(gray, bg)
+
+            # Contrast stretch via cumulative histogram clipping (1% clip)
+            hist = cv2.calcHist([diff], [0], None, [256], [0, 256])
+            acc = np.cumsum(hist)
+            max_val = acc[-1]
+            clip_val = max_val * 0.005
+            min_gray = np.searchsorted(acc, clip_val)
+            max_gray = np.searchsorted(acc, max_val - clip_val)
+            
+            if max_gray > min_gray:
+                alpha = 255.0 / (max_gray - min_gray)
+                beta = -min_gray * alpha
+                enhanced_gray = cv2.convertScaleAbs(diff, alpha=alpha, beta=beta)
+            else:
+                enhanced_gray = diff
+
+            return cv2.cvtColor(enhanced_gray, cv2.COLOR_GRAY2BGR) if is_color else enhanced_gray
+        except Exception:
+            return image
+
+    @classmethod
+    def preprocess_for_ocr(cls, image: np.ndarray, deskew: bool = True) -> np.ndarray:
+        """
+        Preprocessing pipeline for OCR:
+        1. Auto-deskew hand-held angle tilt (if enabled and within safe angle bounds).
+        2. Proportional upscale for small images (w < 800) and smooth downscale for huge images (w > 2500).
+        """
         processed = image.copy()
         
-        # If image is very small (width < 800), upscale with cubic interpolation
+        # 1. Deskew
+        if deskew:
+            processed = cls.deskew_image(processed)
+
+        # 2. Resize constraints
+        h, w = processed.shape[:2]
         if w < 800:
             scale = 800.0 / w
             new_w = 800
             new_h = int(h * scale)
             processed = cv2.resize(processed, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
-            
-        # If image is excessively large for OCR inference (w > 2500), downscale smoothly
         elif w > 2500:
             scale = 2500.0 / w
             new_w = 2500

@@ -187,3 +187,37 @@ def test_extract_back_fields():
     assert fields["issueDate"].value == "15/09/2022"
     assert "CỤC TRƯỞNG" in fields["issueAuthority"].value
     assert "I<VNM" in fields["mrz"].value
+
+def test_fix_ocr_digit_errors_utility():
+    from app.services.cccd_extractor import fix_ocr_digit_errors
+    assert fix_ocr_digit_errors("OO1200000001") == "001200000001"
+    assert fix_ocr_digit_errors("0793O100000Z") == "079301000002"
+    assert fix_ocr_digit_errors("26/O6/2OO5") == "26/06/2005"
+    assert fix_ocr_digit_errors("l5/O8/2O2O") == "15/08/2020"
+
+def test_extract_id_number_with_ocr_confusion():
+    detections = [
+        RawDetection(text="CAN CU'O'C CONG DAN", confidence=0.98),
+        RawDetection(text="So / No.: OO12OO0OO0O1", confidence=0.95),  # 'O' instead of '0'
+    ]
+    side, fields = CCCDExtractor.extract_fields(detections, requested_side=CardSide.FRONT)
+    assert fields["idNumber"].value == "001200000001"
+    assert fields["idNumber"].status in (FieldStatus.EXTRACTED, FieldStatus.VALID)
+
+def test_extract_id_number_with_spaced_digits():
+    detections = [
+        RawDetection(text="CAN CU'O'C CONG DAN", confidence=0.98),
+        RawDetection(text="Số: 036 205 013 225", confidence=0.96),
+    ]
+    side, fields = CCCDExtractor.extract_fields(detections, requested_side=CardSide.FRONT)
+    assert fields["idNumber"].value == "036205013225"
+    assert fields["idNumber"].status in (FieldStatus.EXTRACTED, FieldStatus.VALID)
+
+def test_extract_dates_with_ocr_confusion():
+    detections = [
+        RawDetection(text="Ngay sinh: 26/O6/2OO5", confidence=0.97),
+        RawDetection(text="Co gia tri den: 26/O6/2O3O", confidence=0.96),
+    ]
+    side, fields = CCCDExtractor.extract_fields(detections, requested_side=CardSide.FRONT)
+    assert fields["dateOfBirth"].value == "26/06/2005"
+    assert fields["expiryDate"].value == "26/06/2030"

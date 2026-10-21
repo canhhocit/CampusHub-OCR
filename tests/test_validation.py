@@ -57,3 +57,29 @@ def test_preprocessing():
     assert processed is not None
     # Verify small image was upscaled for better text recognition
     assert processed.shape[1] >= 800
+
+def test_deskew_image_straight():
+    # Straight image should not be distorted
+    jpeg_bytes = create_valid_image_bytes(width=800, height=500)
+    img, _ = ImageProcessor.validate_image_bytes(jpeg_bytes)
+    deskewed = ImageProcessor.deskew_image(img)
+    assert deskewed is not None
+    assert deskewed.shape == img.shape
+
+def test_deskew_empty_and_safety():
+    import numpy as np
+    assert ImageProcessor.deskew_image(None) is None
+    empty = np.zeros((0, 0, 3), dtype=np.uint8)
+    assert ImageProcessor.deskew_image(empty).size == 0
+
+def test_clean_shadows_and_contrast():
+    import numpy as np
+    # Synthetic image with lighting gradient
+    h, w = 400, 600
+    gradient = np.tile(np.linspace(50, 200, w, dtype=np.uint8), (h, 1))
+    color_img = np.stack([gradient, gradient, gradient], axis=-1)
+    cleaned = ImageProcessor.clean_shadows_and_contrast(color_img)
+    assert cleaned is not None
+    assert cleaned.shape == color_img.shape
+    # Check that contrast was stretched
+    assert cleaned.max() > color_img.max() or cleaned.min() < color_img.min()

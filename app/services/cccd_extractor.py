@@ -39,6 +39,23 @@ def remove_accents(input_str: str) -> str:
 def normalize_whitespace(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip() if text else ""
 
+# OCR character confusion mapping for numeric sequences (CCCD number, dates)
+_DIGIT_CONFUSION_MAP = {
+    "O": "0", "o": "0", "Q": "0", "D": "0",
+    "I": "1", "l": "1", "i": "1", "|": "1",
+    "B": "8",
+    "S": "5", "s": "5",
+    "Z": "2", "z": "2",
+    "G": "6",
+    "T": "7",
+}
+
+def fix_ocr_digit_errors(text: str) -> str:
+    """Corrects common OCR character confusions in expected numeric strings (CCCD numbers, dates)."""
+    if not text:
+        return text
+    return "".join(_DIGIT_CONFUSION_MAP.get(ch, ch) for ch in text)
+
 class CCCDExtractor:
     @staticmethod
     def detect_side(detections: list[RawDetection]) -> CardSide:
@@ -181,6 +198,27 @@ class CCCDExtractor:
                     candidate_raw = text
                     break
 
+        # Fallback: repair OCR digit confusions (e.g. O->0, l->1, B->8) and compact internal spaces
+        if not candidate_id:
+            for d in detections:
+                text = d.text.strip()
+                fixed = fix_ocr_digit_errors(text)
+                fixed_compact = re.sub(r"(?<=\d)\s+(?=\d)", "", fixed)
+
+                m_label_fix = re.search(r"(?:s[oóô60][\s/]*[nñ][o0][.:\s]*|[sS][oốô60][.:\s]*|[nN][o0][.:\s]*)(\d{12})", fixed_compact, re.IGNORECASE)
+                if m_label_fix:
+                    candidate_id = m_label_fix.group(1)
+                    candidate_conf = d.confidence * 0.95
+                    candidate_raw = text
+                    break
+
+                m_digits_fix = re.search(r"(?<!\d)(\d{12})(?!\d)", fixed_compact)
+                if m_digits_fix:
+                    candidate_id = m_digits_fix.group(1)
+                    candidate_conf = d.confidence * 0.95
+                    candidate_raw = text
+                    break
+
         if not candidate_id:
             field.status = FieldStatus.MISSING
             field.validation_message = "Không tìm thấy số CCCD 12 chữ số trong ảnh."
@@ -269,9 +307,17 @@ class CCCDExtractor:
                 # Look for date pattern on same line (e.g. birth26/06/2005)
                 m = re.search(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", d.text)
                 target_d = d
+                if not m:
+                    fixed_text = fix_ocr_digit_errors(d.text)
+                    m = re.search(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", fixed_text)
+
                 if not m and i + 1 < len(detections):
-                    m = re.search(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", detections[i + 1].text)
-                    target_d = detections[i + 1]
+                    nxt = detections[i + 1]
+                    m = re.search(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", nxt.text)
+                    target_d = nxt
+                    if not m:
+                        fixed_nxt = fix_ocr_digit_errors(nxt.text)
+                        m = re.search(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", fixed_nxt)
 
                 if m:
                     day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
@@ -387,9 +433,16 @@ class CCCDExtractor:
                 # Date regex
                 m = re.search(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", d.text)
                 target_d = d
+                if not m:
+                    fixed_text = fix_ocr_digit_errors(d.text)
+                    m = re.search(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", fixed_text)
+
                 if not m and idx + 1 < len(detections):
                     nxt = detections[idx + 1]
                     m_nxt = re.search(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", nxt.text)
+                    if not m_nxt:
+                        fixed_nxt = fix_ocr_digit_errors(nxt.text)
+                        m_nxt = re.search(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", fixed_nxt)
                     if m_nxt:
                         m = m_nxt
                         target_d = nxt
