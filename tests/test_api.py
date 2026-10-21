@@ -23,6 +23,10 @@ def test_index_ui_endpoint(client):
     assert "submitFaceBtn" in response.text
     assert "proceedToFaceBtn" in response.text
     assert "ocrProceedBanner" in response.text
+    assert "modeBtnLiveness" in response.text
+    assert "startLivenessBtn" in response.text
+    assert "livenessVideo" in response.text
+    assert "Kiểm tra Thực thể sống" in response.text
 
 def test_ocr_endpoint_validation_error_on_empty(client):
     response = client.post(

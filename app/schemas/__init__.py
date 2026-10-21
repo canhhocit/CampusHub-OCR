@@ -16,6 +16,15 @@ from app.schemas.face import (
     FaceHealthResponse,
 )
 
+from app.schemas.liveness import (
+    ChallengeAction,
+    ChallengeInfo,
+    LivenessSessionCreateResponse,
+    FrameMetric,
+    LivenessStepVerifyResponse,
+    LivenessSessionStatusResponse,
+)
+
 __all__ = [
     "CardSide",
     "FieldStatus",
@@ -30,4 +39,11 @@ __all__ = [
     "FaceDetectionResult",
     "FaceVerificationResponse",
     "FaceHealthResponse",
+    "ChallengeAction",
+    "ChallengeInfo",
+    "LivenessSessionCreateResponse",
+    "FrameMetric",
+    "LivenessStepVerifyResponse",
+    "LivenessSessionStatusResponse",
 ]
+

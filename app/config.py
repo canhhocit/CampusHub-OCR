@@ -56,6 +56,24 @@ class Settings(BaseModel):
         "không cấu thành việc định danh pháp lý hoặc kiểm tra chống giả mạo (liveness/anti-spoofing)."
     )
 
+    # Liveness Detection settings (Active Challenge Prototype V1)
+    LIVENESS_SESSION_TIMEOUT_SEC: int = int(os.getenv("LIVENESS_SESSION_TIMEOUT_SEC", "120"))
+    LIVENESS_MAX_SESSIONS: int = int(os.getenv("LIVENESS_MAX_SESSIONS", "100"))
+    LIVENESS_MIN_FRAMES: int = int(os.getenv("LIVENESS_MIN_FRAMES", "3"))
+    LIVENESS_MAX_FRAMES: int = int(os.getenv("LIVENESS_MAX_FRAMES", "15"))
+    LIVENESS_MAX_PAYLOAD_BYTES: int = 15 * 1024 * 1024  # 15 MB
+    LIVENESS_MAX_STEP_ATTEMPTS: int = 3
+    LIVENESS_YAW_CENTER_MIN: float = 0.40
+    LIVENESS_YAW_CENTER_MAX: float = 0.60
+    LIVENESS_YAW_TURN_LEFT_MIN: float = 0.65
+    LIVENESS_YAW_TURN_RIGHT_MAX: float = 0.35
+    LIVENESS_MIN_MOTION_VARIANCE: float = 0.04
+    LIVENESS_DISCLAIMER: str = (
+        "Kết quả kiểm tra thực thể sống V1 (Liveness Detection) dựa trên thách thức chủ động (Active Challenge). "
+        "Đây là phiên bản thử nghiệm thuật toán (research prototype), không thay thế chứng thực sinh trắc học chuẩn quốc tế "
+        "hoặc chống lại các cuộc tấn công giả mạo tinh vi (deepfake/replay)."
+    )
+
     # Disclaimer
     DISCLAIMER: str = (
         "Kết quả OCR mang tính chất thử nghiệm và trích xuất dữ liệu tự động, "

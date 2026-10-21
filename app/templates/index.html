@@ -59,6 +59,13 @@
                 </svg>
                 <span>2. So khớp Khuôn mặt 1:1 (Face Verification)</span>
             </button>
+            <button type="button" class="mode-tab-btn" id="modeBtnLiveness" data-mode="liveness">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 12a11.05 11.05 0 0 0-22 0zm-5 0a6 6 0 1 1-12 0 6 6 0 0 1 12 0z"></path>
+                    <circle cx="12" cy="12" r="2"></circle>
+                </svg>
+                <span>3. Kiểm tra Thực thể sống (Liveness V1)</span>
+            </button>
         </nav>
 
         <!-- ================= MODE 1: OCR SECTION ================= -->
@@ -417,6 +424,138 @@
 
                         <!-- Disclaimer Box -->
                         <div class="disclaimer-card" id="faceDisclaimerBox"></div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- ================= MODE 3: LIVENESS SECTION ================= -->
+        <div class="mode-view" id="viewLiveness">
+            <div class="grid-layout">
+                <!-- Left Panel: Camera & Active Challenge Instructions -->
+                <section class="panel liveness-panel">
+                    <div class="panel-header">
+                        <h2>1. Thử thách Cử động Chủ động (Active Challenge)</h2>
+                        <span class="badge-tag">CHALLENGE V1</span>
+                    </div>
+
+                    <!-- Liveness Camera Viewport -->
+                    <div class="liveness-viewport-container">
+                        <div class="liveness-camera-box" id="livenessCameraBox" style="display: none;">
+                            <video id="livenessVideo" autoplay playsinline muted></video>
+                            <canvas id="livenessCanvas" style="display: none;"></canvas>
+                            <!-- Face Guide Oval Overlay -->
+                            <div class="face-guide-oval" id="faceGuideOval">
+                                <div class="oval-border"></div>
+                                <div class="oval-hint" id="ovalHintText">Căn chỉnh khuôn mặt vào khung bầu dục</div>
+                            </div>
+                            <!-- Motion Cue Overlay -->
+                            <div class="motion-cue-overlay" id="motionCueOverlay" style="display: none;">
+                                <div class="motion-arrow" id="motionArrow">➔</div>
+                                <div class="motion-label" id="motionLabel">Quay đầu sang trái</div>
+                            </div>
+                        </div>
+
+                        <!-- Camera Inactive Placeholder -->
+                        <div class="liveness-placeholder" id="livenessPlaceholder">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                <circle cx="12" cy="13" r="4"></circle>
+                            </svg>
+                            <p class="placeholder-title">Webcam chưa được kích hoạt</p>
+                            <p class="placeholder-desc">Nhấn "Bắt đầu kiểm tra" bên dưới để cấp quyền camera và nhận chuỗi thử thách ngẫu nhiên từ hệ thống.</p>
+                        </div>
+                    </div>
+
+                    <!-- Active Challenge Card -->
+                    <div class="challenge-card" id="livenessChallengeCard" style="display: none;">
+                        <div class="challenge-header">
+                            <span class="step-badge" id="liveStepBadge">Bước 1/2</span>
+                            <span class="action-name-badge" id="liveActionBadge">QUAY ĐẦU SANG TRÁI</span>
+                        </div>
+                        <p class="challenge-instruction" id="liveInstructionText">
+                            Vui lòng nhìn thẳng, sau đó quay đầu từ từ sang bên TRÁI của bạn.
+                        </p>
+                        <!-- Progress / Timer bar -->
+                        <div class="challenge-progress-bar">
+                            <div class="challenge-progress-fill" id="liveProgressFill" style="width: 0%;"></div>
+                        </div>
+                        <div class="challenge-status-text" id="liveStatusText">Đang chuẩn bị...</div>
+                    </div>
+
+                    <!-- Control Buttons -->
+                    <div class="liveness-controls">
+                        <button type="button" id="startLivenessBtn" class="btn btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polygon points="10 8 16 12 10 16 10 8"></polygon>
+                            </svg>
+                            <span>Bắt đầu kiểm tra Liveness</span>
+                        </button>
+                        <button type="button" id="stopLivenessBtn" class="btn-text" style="display: none;">
+                            Hủy / Đóng camera
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Right Panel: Results & Diagnostics -->
+                <section class="panel results-panel">
+                    <div class="panel-header">
+                        <h2>2. Kết quả Xác minh Thực thể sống</h2>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div class="empty-state" id="livenessEmptyState">
+                        <div class="empty-icon-svg">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                            </svg>
+                        </div>
+                        <p class="empty-title">Chưa có kết quả kiểm tra</p>
+                        <p class="empty-desc">Hệ thống sẽ hướng dẫn bạn thực hiện một chuỗi cử động ngẫu nhiên để xác minh bạn là người thật đang trực tiếp thao tác.</p>
+                    </div>
+
+                    <!-- Alerts -->
+                    <div class="alert alert-error" id="livenessErrorBox" style="display: none;"></div>
+                    <div class="alert alert-warning" id="livenessWarningBox" style="display: none;"></div>
+
+                    <!-- Challenge History Checklist -->
+                    <div class="challenge-checklist-container" id="livenessChecklistContainer" style="display: none;">
+                        <h3 class="section-subtitle">Tiến trình Thử thách</h3>
+                        <div class="checklist-items" id="livenessChecklistItems"></div>
+                    </div>
+
+                    <!-- Final Result Content -->
+                    <div class="face-result-content" id="livenessResultContent" style="display: none;">
+                        <div class="decision-card" id="livenessDecisionCard">
+                            <div class="decision-badge" id="livenessDecisionBadge">XÁC MINH THÀNH CÔNG</div>
+                            <div class="decision-subtitle" id="livenessDecisionSubtitle">Đã hoàn thành chuỗi thử thách cử động thực thể sống</div>
+                        </div>
+
+                        <!-- Metrics Grid -->
+                        <div class="metrics-grid">
+                            <div class="metric-card">
+                                <div class="metric-title">Biến thiên chuyển động</div>
+                                <div class="metric-value" id="resLiveMotionDelta">0.000</div>
+                                <div class="metric-sub">Ngưỡng tối thiểu: 0.040</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-title">Số bước vượt qua</div>
+                                <div class="metric-value" id="resLiveCompletedSteps">0/2</div>
+                                <div class="metric-sub">Chuỗi thử thách ngẫu nhiên</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-title">Thời gian phiên</div>
+                                <div class="metric-value" id="resLiveDuration">0s</div>
+                                <div class="metric-sub">Timeout tối đa: 120s</div>
+                            </div>
+                        </div>
+
+                        <!-- Prototype Disclaimer -->
+                        <div class="disclaimer-card" id="livenessDisclaimerBox">
+                            <strong>Lưu ý Giới hạn Thử nghiệm (Prototype Disclaimer):</strong>
+                            <p>Kết quả kiểm tra thực thể sống V1 dựa trên thách thức chủ động (Active Challenge). Đây là phiên bản thử nghiệm thuật toán (research prototype), không thay thế chứng thực sinh trắc học chuẩn quốc tế hoặc chống lại các cuộc tấn công giả mạo tinh vi (video replay/deepfake chuyên dụng).</p>
+                        </div>
                     </div>
                 </section>
             </div>

@@ -939,3 +939,261 @@ body {
     50% { transform: scale(1.05); }
 }
 
+/* ==========================================================================
+   LIVENESS DETECTION V1 STYLES
+   ========================================================================== */
+
+.liveness-viewport-container {
+    position: relative;
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.liveness-camera-box {
+    position: relative;
+    width: 100%;
+    height: 380px;
+    background: #0f172a;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--border-color);
+}
+
+.liveness-camera-box video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1); /* Natural selfie mirror view */
+}
+
+/* Face Guide Oval */
+.face-guide-oval {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.oval-border {
+    width: 200px;
+    height: 260px;
+    border: 2px dashed rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
+    box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.45);
+    transition: border-color 0.3s ease, transform 0.3s ease;
+}
+
+.face-guide-oval.active-oval .oval-border {
+    border-color: #22c55e;
+    border-style: solid;
+}
+
+.oval-hint {
+    margin-top: 12px;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 500;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.5);
+    padding: 3px 12px;
+    border-radius: 20px;
+}
+
+/* Motion Cue Overlay */
+.motion-cue-overlay {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.85);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    padding: 8px 18px;
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+}
+
+.motion-arrow {
+    font-size: 20px;
+    animation: bounce-arrow 1s infinite alternate;
+}
+
+.motion-label {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+@keyframes bounce-arrow {
+    0% { transform: translateX(-4px); }
+    100% { transform: translateX(6px); }
+}
+
+/* Inactive Placeholder */
+.liveness-placeholder {
+    width: 100%;
+    height: 340px;
+    background: var(--bg-hover);
+    border: 2px dashed var(--border-color);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+}
+
+.liveness-placeholder svg {
+    stroke: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.placeholder-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 6px;
+}
+
+.placeholder-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    max-width: 380px;
+    line-height: 1.5;
+}
+
+/* Challenge Prompt Card */
+.challenge-card {
+    background: var(--bg-main);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--primary);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.challenge-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.step-badge {
+    background: #e2e8f0;
+    color: #334155;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+.action-name-badge {
+    background: rgba(234, 88, 12, 0.1);
+    color: #ea580c;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.challenge-instruction {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-main);
+    margin-bottom: 12px;
+    line-height: 1.4;
+}
+
+.challenge-progress-bar {
+    width: 100%;
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.challenge-progress-fill {
+    height: 100%;
+    background: var(--primary);
+    transition: width 0.15s linear;
+}
+
+.challenge-status-text {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+/* Liveness Controls */
+.liveness-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Checklist in Results */
+.challenge-checklist-container {
+    background: var(--bg-main);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 16px;
+}
+
+.checklist-items {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.checklist-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--card-bg);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    font-size: 13px;
+}
+
+.checklist-item.passed {
+    border-color: #86efac;
+    background: #f0fdf4;
+}
+
+.checklist-item.failed {
+    border-color: #fca5a5;
+    background: #fef2f2;
+}
+
+.checklist-icon {
+    font-weight: bold;
+    margin-right: 8px;
+}
+
+.checklist-item.passed .checklist-icon {
+    color: #16a34a;
+}
+
+.checklist-item.failed .checklist-icon {
+    color: #dc2626;
+}
+
+

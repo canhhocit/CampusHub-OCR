@@ -42,12 +42,14 @@ document.addEventListener("DOMContentLoaded", () => {
     checkFaceHealth();
 
     // ==========================================
-    // 2. Mode Navigation (OCR vs Face Verification)
+    // 2. Mode Navigation (OCR vs Face Verification vs Liveness)
     // ==========================================
     const modeBtnOcr = document.getElementById("modeBtnOcr");
     const modeBtnFace = document.getElementById("modeBtnFace");
+    const modeBtnLiveness = document.getElementById("modeBtnLiveness");
     const viewOcr = document.getElementById("viewOcr");
     const viewFace = document.getElementById("viewFace");
+    const viewLiveness = document.getElementById("viewLiveness");
     const useOcrCardBtn = document.getElementById("useOcrCardBtn");
     const proceedToFaceBtn = document.getElementById("proceedToFaceBtn");
     const ocrProceedBanner = document.getElementById("ocrProceedBanner");
@@ -55,6 +57,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     modeBtnOcr.addEventListener("click", () => switchMode("ocr"));
     modeBtnFace.addEventListener("click", () => switchMode("face"));
+    if (modeBtnLiveness) {
+        modeBtnLiveness.addEventListener("click", () => switchMode("liveness"));
+    }
 
     if (proceedToFaceBtn) {
         proceedToFaceBtn.addEventListener("click", () => {
@@ -64,17 +69,27 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function switchMode(mode) {
-        if (mode === "ocr") {
-            modeBtnOcr.classList.add("active");
-            modeBtnFace.classList.remove("active");
-            viewOcr.style.display = "block";
-            viewFace.style.display = "none";
-        } else {
-            modeBtnFace.classList.add("active");
-            modeBtnOcr.classList.remove("active");
-            viewOcr.style.display = "none";
-            viewFace.style.display = "block";
+        // Stop any active liveness webcam session when switching away
+        if (mode !== "liveness") {
+            stopLivenessSession();
+        }
+        if (mode !== "face") {
+            stopWebcam();
+        }
 
+        modeBtnOcr.classList.toggle("active", mode === "ocr");
+        modeBtnFace.classList.toggle("active", mode === "face");
+        if (modeBtnLiveness) {
+            modeBtnLiveness.classList.toggle("active", mode === "liveness");
+        }
+
+        viewOcr.style.display = mode === "ocr" ? "block" : "none";
+        viewFace.style.display = mode === "face" ? "block" : "none";
+        if (viewLiveness) {
+            viewLiveness.style.display = mode === "liveness" ? "block" : "none";
+        }
+
+        if (mode === "face") {
             // If an OCR card is already uploaded, automatically carry it over to Face Card slot!
             if (currentOcrFile && !currentFaceCardFile) {
                 handleFaceCardSelect(currentOcrFile);
@@ -859,6 +874,338 @@ document.addEventListener("DOMContentLoaded", () => {
             } else {
                 qPipelineState.innerHTML = `<span class="badge-status badge-INVALID">${escapeHtml(state)}</span>`;
             }
+        }
+    }
+
+    // ==========================================
+    // 5. Liveness Detection V1 Logic
+    // ==========================================
+    const startLivenessBtn = document.getElementById("startLivenessBtn");
+    const stopLivenessBtn = document.getElementById("stopLivenessBtn");
+    const livenessCameraBox = document.getElementById("livenessCameraBox");
+    const livenessPlaceholder = document.getElementById("livenessPlaceholder");
+    const livenessVideo = document.getElementById("livenessVideo");
+    const livenessCanvas = document.getElementById("livenessCanvas");
+    const faceGuideOval = document.getElementById("faceGuideOval");
+    const motionCueOverlay = document.getElementById("motionCueOverlay");
+    const motionArrow = document.getElementById("motionArrow");
+    const motionLabel = document.getElementById("motionLabel");
+    const livenessChallengeCard = document.getElementById("livenessChallengeCard");
+    const liveStepBadge = document.getElementById("liveStepBadge");
+    const liveActionBadge = document.getElementById("liveActionBadge");
+    const liveInstructionText = document.getElementById("liveInstructionText");
+    const liveProgressFill = document.getElementById("liveProgressFill");
+    const liveStatusText = document.getElementById("liveStatusText");
+    const livenessEmptyState = document.getElementById("livenessEmptyState");
+    const livenessErrorBox = document.getElementById("livenessErrorBox");
+    const livenessWarningBox = document.getElementById("livenessWarningBox");
+    const livenessChecklistContainer = document.getElementById("livenessChecklistContainer");
+    const livenessChecklistItems = document.getElementById("livenessChecklistItems");
+    const livenessResultContent = document.getElementById("livenessResultContent");
+    const livenessDecisionCard = document.getElementById("livenessDecisionCard");
+    const livenessDecisionBadge = document.getElementById("livenessDecisionBadge");
+    const livenessDecisionSubtitle = document.getElementById("livenessDecisionSubtitle");
+    const resLiveMotionDelta = document.getElementById("resLiveMotionDelta");
+    const resLiveCompletedSteps = document.getElementById("resLiveCompletedSteps");
+    const resLiveDuration = document.getElementById("resLiveDuration");
+
+    let livenessStream = null;
+    let livenessSessionId = null;
+    let livenessIsCapturing = false;
+    let livenessSessionStartTime = 0;
+    let livenessCurrentChallenge = null;
+    let livenessCaptureTimer = null;
+
+    if (startLivenessBtn) {
+        startLivenessBtn.addEventListener("click", () => startLivenessSession());
+    }
+    if (stopLivenessBtn) {
+        stopLivenessBtn.addEventListener("click", () => stopLivenessSession());
+    }
+
+    function stopLivenessSession() {
+        if (livenessCaptureTimer) {
+            clearTimeout(livenessCaptureTimer);
+            clearInterval(livenessCaptureTimer);
+            livenessCaptureTimer = null;
+        }
+        livenessIsCapturing = false;
+
+        if (livenessStream) {
+            livenessStream.getTracks().forEach(track => track.stop());
+            livenessStream = null;
+        }
+
+        if (livenessVideo) {
+            livenessVideo.srcObject = null;
+        }
+
+        if (livenessCameraBox) livenessCameraBox.style.display = "none";
+        if (livenessPlaceholder) livenessPlaceholder.style.display = "flex";
+        if (livenessChallengeCard) livenessChallengeCard.style.display = "none";
+        if (motionCueOverlay) motionCueOverlay.style.display = "none";
+        if (stopLivenessBtn) stopLivenessBtn.style.display = "none";
+        if (startLivenessBtn) {
+            startLivenessBtn.style.display = "inline-flex";
+            startLivenessBtn.disabled = false;
+        }
+    }
+
+    function hideLivenessAlerts() {
+        if (livenessErrorBox) livenessErrorBox.style.display = "none";
+        if (livenessWarningBox) livenessWarningBox.style.display = "none";
+    }
+
+    function showLivenessError(msg) {
+        if (livenessErrorBox) {
+            livenessErrorBox.innerHTML = `<strong>Lỗi:</strong> ${escapeHtml(msg)}`;
+            livenessErrorBox.style.display = "block";
+        }
+    }
+
+    function showLivenessWarning(msg) {
+        if (livenessWarningBox) {
+            livenessWarningBox.innerHTML = `<strong>Lưu ý:</strong> ${escapeHtml(msg)}`;
+            livenessWarningBox.style.display = "block";
+        }
+    }
+
+    async function startLivenessSession() {
+        hideLivenessAlerts();
+        if (livenessEmptyState) livenessEmptyState.style.display = "none";
+        if (livenessResultContent) livenessResultContent.style.display = "none";
+        if (livenessChecklistContainer) {
+            livenessChecklistContainer.style.display = "none";
+            livenessChecklistItems.innerHTML = "";
+        }
+
+        // 1. Request camera permission
+        try {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showLivenessError("Trình duyệt của bạn không hỗ trợ truy cập webcam.");
+                return;
+            }
+
+            livenessStream = await navigator.mediaDevices.getUserMedia({
+                video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+                audio: false
+            });
+            livenessVideo.srcObject = livenessStream;
+
+            livenessPlaceholder.style.display = "none";
+            livenessCameraBox.style.display = "flex";
+            startLivenessBtn.style.display = "none";
+            stopLivenessBtn.style.display = "inline-flex";
+        } catch (err) {
+            showLivenessError("Không thể mở camera. Vui lòng cấp quyền sử dụng webcam để thực hiện kiểm tra thực thể sống.");
+            return;
+        }
+
+        // 2. Call backend to create randomized session
+        try {
+            const res = await fetch("/api/v1/liveness/session/create", { method: "POST" });
+            if (!res.ok) {
+                throw new Error("Không thể khởi tạo phiên kiểm tra trên máy chủ.");
+            }
+            const data = await res.json();
+            livenessSessionId = data.session_id;
+            livenessSessionStartTime = Date.now();
+            livenessCurrentChallenge = data.challenge;
+
+            livenessChecklistContainer.style.display = "block";
+            livenessChallengeCard.style.display = "block";
+
+            prepareChallengeStep(data.challenge);
+        } catch (err) {
+            stopLivenessSession();
+            showLivenessError(err.message || "Đã xảy ra sự cố khi kết nối tới dịch vụ liveness.");
+        }
+    }
+
+    function prepareChallengeStep(challenge) {
+        livenessCurrentChallenge = challenge;
+        liveStepBadge.textContent = `Bước ${challenge.step}/${challenge.total_steps}`;
+        liveInstructionText.textContent = challenge.instruction;
+        liveProgressFill.style.width = "0%";
+
+        // Configure motion cue visuals
+        motionCueOverlay.style.display = "flex";
+        if (challenge.action === "TURN_HEAD_LEFT") {
+            liveActionBadge.textContent = "QUAY ĐẦU SANG TRÁI";
+            motionArrow.textContent = "➔"; // Mirrored selfie view points left
+            motionLabel.textContent = "Quay đầu sang trái";
+        } else if (challenge.action === "TURN_HEAD_RIGHT") {
+            liveActionBadge.textContent = "QUAY ĐẦU SANG PHẢI";
+            motionArrow.textContent = "←";
+            motionLabel.textContent = "Quay đầu sang phải";
+        } else if (challenge.action === "NOD_HEAD") {
+            liveActionBadge.textContent = "GẬT ĐẦU NHẸ";
+            motionArrow.textContent = "↓";
+            motionLabel.textContent = "Gật đầu nhẹ xuống";
+        } else {
+            liveActionBadge.textContent = "NHÌN THẲNG";
+            motionArrow.textContent = "⦿";
+            motionLabel.textContent = "Nhìn thẳng vào giữa";
+        }
+
+        // 2-second countdown before recording
+        let countdown = 2;
+        liveStatusText.textContent = `Chuẩn bị cử động sau ${countdown}s...`;
+        const countInterval = setInterval(() => {
+            countdown -= 1;
+            if (countdown > 0) {
+                liveStatusText.textContent = `Chuẩn bị cử động sau ${countdown}s...`;
+            } else {
+                clearInterval(countInterval);
+                captureChallengeSequence(challenge);
+            }
+        }, 1000);
+    }
+
+    function captureChallengeSequence(challenge) {
+        if (!livenessStream || !livenessVideo) return;
+        livenessIsCapturing = true;
+        liveStatusText.textContent = "Đang ghi nhận chuyển động... Hãy thực hiện cử động ngay!";
+        faceGuideOval.classList.add("active-oval");
+
+        const frames = [];
+        const totalFrames = 6;
+        const intervalMs = 250; // Capture 6 frames over 1.5 seconds
+        let frameCount = 0;
+
+        const captureInterval = setInterval(() => {
+            if (!livenessIsCapturing || !livenessStream) {
+                clearInterval(captureInterval);
+                return;
+            }
+
+            const w = livenessVideo.videoWidth || 640;
+            const h = livenessVideo.videoHeight || 480;
+            livenessCanvas.width = w;
+            livenessCanvas.height = h;
+            const ctx = livenessCanvas.getContext("2d");
+            ctx.drawImage(livenessVideo, 0, 0, w, h);
+
+            livenessCanvas.toBlob((blob) => {
+                if (blob) {
+                    frames.push(new File([blob], `frame_${frameCount}.jpg`, { type: "image/jpeg" }));
+                }
+                frameCount += 1;
+                const progressPct = Math.min(100, Math.round((frameCount / totalFrames) * 100));
+                liveProgressFill.style.width = `${progressPct}%`;
+
+                if (frameCount >= totalFrames) {
+                    clearInterval(captureInterval);
+                    faceGuideOval.classList.remove("active-oval");
+                    motionCueOverlay.style.display = "none";
+                    liveStatusText.textContent = "Đang phân tích chuỗi khung hình sinh trắc học...";
+                    submitStepFrames(challenge, frames);
+                }
+            }, "image/jpeg", 0.90);
+        }, intervalMs);
+    }
+
+    async function submitStepFrames(challenge, frameFiles) {
+        const formData = new FormData();
+        frameFiles.forEach(f => formData.append("frames", f));
+
+        try {
+            const res = await fetch(`/api/v1/liveness/session/${livenessSessionId}/verify-step`, {
+                method: "POST",
+                body: formData,
+            });
+
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.detail || "Không thể xác minh bước thử thách.");
+            }
+
+            const result = await res.json();
+            handleStepResult(challenge, result);
+        } catch (err) {
+            showLivenessError(err.message || "Lỗi kiểm tra khung hình.");
+            liveStatusText.textContent = "Lỗi xác thực bước. Vui lòng thử lại.";
+        }
+    }
+
+    function handleStepResult(challenge, result) {
+        hideLivenessAlerts();
+
+        // Append checklist entry
+        const checklistItem = document.createElement("div");
+        checklistItem.className = `checklist-item ${result.step_passed ? "passed" : "failed"}`;
+        checklistItem.innerHTML = `
+            <div>
+                <span class="checklist-icon">${result.step_passed ? "✓" : "✗"}</span>
+                <strong>Bước ${challenge.step}:</strong> ${escapeHtml(challenge.instruction)}
+            </div>
+            <span class="badge-status ${result.step_passed ? "badge-VALID" : "badge-INVALID"}">
+                ${result.step_passed ? "ĐẠT" : "CHƯA ĐẠT"}
+            </span>
+        `;
+        livenessChecklistItems.appendChild(checklistItem);
+
+        if (result.step_passed) {
+            if (result.all_passed) {
+                // ALL STEPS PASSED!
+                showLivenessSuccess(result);
+            } else if (result.next_challenge) {
+                // Proceed to next step
+                liveStatusText.textContent = "Bước đạt! Chuẩn bị bước tiếp theo...";
+                setTimeout(() => {
+                    prepareChallengeStep(result.next_challenge);
+                }, 1500);
+            }
+        } else {
+            // STEP FAILED
+            showLivenessWarning(result.message);
+            if (result.status === "FAILED") {
+                showLivenessFailure(result);
+            } else {
+                liveStatusText.textContent = "Chưa đạt. Đang chuẩn bị thử lại bước này...";
+                setTimeout(() => {
+                    prepareChallengeStep(challenge);
+                }, 2000);
+            }
+        }
+    }
+
+    function showLivenessSuccess(result) {
+        stopLivenessSession();
+        if (livenessChallengeCard) livenessChallengeCard.style.display = "none";
+        livenessResultContent.style.display = "block";
+
+        livenessDecisionCard.className = "decision-card decision-matched";
+        livenessDecisionBadge.textContent = "XÁC MINH THÀNH CÔNG (LIVENESS PASSED)";
+        livenessDecisionSubtitle.textContent = result.message || "Người dùng đã vượt qua chuỗi cử động thực thể sống.";
+
+        const durationSec = Math.round((Date.now() - livenessSessionStartTime) / 1000);
+        resLiveDuration.textContent = `${durationSec}s`;
+        resLiveCompletedSteps.textContent = `${result.total_steps}/${result.total_steps}`;
+
+        if (result.metrics && result.metrics.motion_delta !== undefined) {
+            resLiveMotionDelta.textContent = Number(result.metrics.motion_delta).toFixed(4);
+        } else {
+            resLiveMotionDelta.textContent = "> 0.040";
+        }
+    }
+
+    function showLivenessFailure(result) {
+        stopLivenessSession();
+        if (livenessChallengeCard) livenessChallengeCard.style.display = "none";
+        livenessResultContent.style.display = "block";
+
+        livenessDecisionCard.className = "decision-card decision-mismatched";
+        livenessDecisionBadge.textContent = "XÁC MINH THẤT BẠI (LIVENESS FAILED)";
+        livenessDecisionSubtitle.textContent = result.message || "Phiên kiểm tra đã thất bại do vi phạm điều kiện thực thể sống.";
+
+        const durationSec = Math.round((Date.now() - livenessSessionStartTime) / 1000);
+        resLiveDuration.textContent = `${durationSec}s`;
+        resLiveCompletedSteps.textContent = `${result.current_step - 1}/${result.total_steps}`;
+        if (result.metrics && result.metrics.motion_delta !== undefined) {
+            resLiveMotionDelta.textContent = Number(result.metrics.motion_delta).toFixed(4);
+        } else {
+            resLiveMotionDelta.textContent = "0.000";
         }
     }
 

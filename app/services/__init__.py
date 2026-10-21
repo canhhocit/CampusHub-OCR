@@ -10,6 +10,14 @@ from app.services.face_verifier import (
     get_face_verifier,
     set_face_verifier,
 )
+from app.services.liveness_service import (
+    LivenessService,
+    BaseLivenessDetector,
+    YuNetLivenessDetector,
+    MockLivenessDetector,
+    get_liveness_service,
+    set_liveness_service,
+)
 
 __all__ = [
     "ImageProcessor",
@@ -27,4 +35,10 @@ __all__ = [
     "FaceVerifierService",
     "get_face_verifier",
     "set_face_verifier",
+    "LivenessService",
+    "BaseLivenessDetector",
+    "YuNetLivenessDetector",
+    "MockLivenessDetector",
+    "get_liveness_service",
+    "set_liveness_service",
 ]

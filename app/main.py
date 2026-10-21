@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from app.config import settings
 from app.api.routes import router
 from app.api.face_routes import face_router
+from app.api.liveness_routes import liveness_router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -46,6 +47,7 @@ templates = Jinja2Templates(directory="app/templates")
 # Include API routers
 app.include_router(router, prefix="/api/v1")
 app.include_router(face_router, prefix="/api/v1/face")
+app.include_router(liveness_router, prefix="/api/v1/liveness")
 
 # Web testing interface
 @app.get("/", response_class=HTMLResponse)
