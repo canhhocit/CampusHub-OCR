@@ -221,3 +221,78 @@ def test_extract_dates_with_ocr_confusion():
     side, fields = CCCDExtractor.extract_fields(detections, requested_side=CardSide.FRONT)
     assert fields["dateOfBirth"].value == "26/06/2005"
     assert fields["expiryDate"].value == "26/06/2030"
+
+def test_reproduction_case_real_ocr_output():
+    """Exact reproduction test from real OCR output."""
+    raw_lines = [
+        "CONG HOAXA HOICHUNGHIAVIETNAM",
+        "DpcapTudoHanh.phuc",
+        "SOCIALSTREPUBLIC OFVIETAAM",
+        "CAN CUOC CONG DAN",
+        "Citizen dentiry CardO",
+        "$6/015203008075",
+        "Hovaten/Ful.name",
+        "VU XUAN TU",
+        "Ngaysinh/Doeofth03/02/2003",
+        "Gioi tinh/SexNamQuoc tich/NaonayViet Nam",
+        "Quequanl.Piaceoforigin.",
+        "Diep Nong.Hung HaThai Binh",
+        "Not thuong tru/Piace fresence Thon Nghia Hurng",
+        "Datootarny",
+        "Nghia Tarm.Van Chan.Yen Bai.",
+    ]
+    detections = [RawDetection(text=t, confidence=0.95) for t in raw_lines]
+    side, fields = CCCDExtractor.extract_fields(detections, requested_side=CardSide.FRONT)
+
+    assert side == CardSide.FRONT
+    # CCCD number
+    assert fields["idNumber"].value == "015203008075"
+    assert fields["idNumber"].status == FieldStatus.EXTRACTED
+    # Full name
+    assert fields["fullName"].value == "VU XUAN TU"
+    assert fields["fullName"].status == FieldStatus.EXTRACTED
+    # Date of birth
+    assert fields["dateOfBirth"].value == "03/02/2003"
+    assert fields["dateOfBirth"].status == FieldStatus.EXTRACTED
+    # Gender & Nationality
+    assert fields["gender"].value == "Nam"
+    assert fields["nationality"].value == "Việt Nam"
+    # Place of origin (normalized without Piaceoforigin)
+    assert fields["placeOfOrigin"].value == "Diep Nong, Hung HaThai Binh"
+    assert "Piaceoforigin" not in fields["placeOfOrigin"].value
+    # Place of residence (multiline joined, excluding Datootarny)
+    assert fields["placeOfResidence"].value == "Thon Nghia Hurng, Nghia Tarm, Van Chan, Yen Bai"
+    assert "Datootarny" not in fields["placeOfResidence"].value
+    assert "Piace fresence" not in fields["placeOfResidence"].value
+    # Expiry date (missing since no date present, not crashing or absorbing address)
+    assert fields["expiryDate"].value is None
+    assert fields["expiryDate"].status == FieldStatus.MISSING
+
+def test_full_name_on_same_line_with_diacritics():
+    """Test full name extraction on same line with Vietnamese diacritics preserved."""
+    detections = [
+        RawDetection(text="Họ và tên / Full name: LÊ THỊ MINH NGUYỆT", confidence=0.98),
+    ]
+    side, fields = CCCDExtractor.extract_fields(detections, requested_side=CardSide.FRONT)
+    assert fields["fullName"].value == "LÊ THỊ MINH NGUYỆT"
+    assert fields["fullName"].status == FieldStatus.EXTRACTED
+
+def test_name_does_not_consume_next_header_or_digits():
+    """Verify parser does not consume another header or numeric text as name."""
+    detections = [
+        RawDetection(text="Họ và tên / Full name", confidence=0.95),
+        RawDetection(text="CAN CUOC CONG DAN", confidence=0.99),
+    ]
+    side, fields = CCCDExtractor.extract_fields(detections, requested_side=CardSide.FRONT)
+    assert fields["fullName"].status in (FieldStatus.MISSING, FieldStatus.NOT_DETECTED)
+    assert fields["fullName"].value is None
+
+def test_expiry_date_with_next_line_date():
+    """Test expiry date appearing on line after corrupted label."""
+    detections = [
+        RawDetection(text="Datootarny", confidence=0.92),
+        RawDetection(text="15/10/2030", confidence=0.96),
+    ]
+    side, fields = CCCDExtractor.extract_fields(detections, requested_side=CardSide.FRONT)
+    assert fields["expiryDate"].value == "15/10/2030"
+    assert fields["expiryDate"].status == FieldStatus.EXTRACTED

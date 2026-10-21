@@ -39,6 +39,23 @@ def remove_accents(input_str: str) -> str:
 def normalize_whitespace(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip() if text else ""
 
+def normalize_address(text: str) -> str:
+    """
+    Normalizes excessive spaces, OCR dot delimiters, and punctuation in CCCD addresses.
+    Does NOT invent or guess administrative place names, but cleans up OCR punctuation noise
+    (e.g. converting 'Diep Nong.Hung HaThai Binh' to 'Diep Nong, Hung HaThai Binh' and
+    'Nghia Tarm.Van Chan.Yen Bai.' to 'Nghia Tarm, Van Chan, Yen Bai').
+    Preserves abbreviations like 'TP.', 'TX.', 'TT.', 'Q.', 'H.', 'P.', 'X.'.
+    """
+    if not text:
+        return ""
+    # Convert dot delimiters between words to comma + space (e.g. Diep Nong.Hung -> Diep Nong, Hung)
+    cleaned = re.sub(r"(?<!\b(?:TP|TX|TT))(?<!\b[QHPX])\.\s*(?=[A-Za-z0-9À-ỹ])", ", ", text)
+    # Clean trailing or leading punctuation
+    cleaned = re.sub(r"^[,\s.:;/-]+|[,\s.:;/-]+$", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
 # OCR character confusion mapping for numeric sequences (CCCD number, dates)
 _DIGIT_CONFUSION_MAP = {
     "O": "0", "o": "0", "Q": "0", "D": "0",
@@ -172,8 +189,8 @@ class CCCDExtractor:
 
         for d in detections:
             text = d.text.strip()
-            # 1. Match label-attached pattern (e.g. s6/No036205013225, No: 036205013225)
-            m_label = re.search(r"(?:s[oóô60][\s/]*[nñ][o0][.:\s]*|[sS][oốô60][.:\s]*|[nN][o0][.:\s]*)(\d{12})", text, re.IGNORECASE)
+            # 1. Match label-attached pattern (e.g. s6/No036205013225, $6/015203008075, No: 036205013225)
+            m_label = re.search(r"(?:[\$sS5][oóô60][\s/]*[nñ][o0][.:\s]*|[\$sS5][oốô60][.:\s/]*|[nN][o0][.:\s]*)(\d{12})", text, re.IGNORECASE)
             if m_label:
                 candidate_id = m_label.group(1)
                 candidate_conf = d.confidence
@@ -205,7 +222,7 @@ class CCCDExtractor:
                 fixed = fix_ocr_digit_errors(text)
                 fixed_compact = re.sub(r"(?<=\d)\s+(?=\d)", "", fixed)
 
-                m_label_fix = re.search(r"(?:s[oóô60][\s/]*[nñ][o0][.:\s]*|[sS][oốô60][.:\s]*|[nN][o0][.:\s]*)(\d{12})", fixed_compact, re.IGNORECASE)
+                m_label_fix = re.search(r"(?:[\$sS5][oóô60][\s/]*[nñ][o0][.:\s]*|[\$sS5][oốô60][.:\s/]*|[nN][o0][.:\s]*)(\d{12})", fixed_compact, re.IGNORECASE)
                 if m_label_fix:
                     candidate_id = m_label_fix.group(1)
                     candidate_conf = d.confidence * 0.95
@@ -254,23 +271,33 @@ class CCCDExtractor:
 
         for i, d in enumerate(detections):
             norm = remove_accents(d.text.upper())
-            if any(k in norm for k in ["HO VA TEN", "HOVA TEN", "FULL NAME"]):
+            norm_clean = re.sub(r"[^A-Z]", "", norm)
+            is_name_label = (
+                any(k in norm for k in ["HO VA TEN", "HOVA TEN", "HO TEN", "FULL NAME"])
+                or any(k in norm_clean for k in ["HOVATEN", "HOTEN", "FULLNAME", "FULNAME"])
+                or bool(re.search(r"\b(?:h[oọô0][\s_.]*(?:v[aàâ][\s_.]*)?t[eêéè]n|hova[\s_.]*ten|h[oọô0]ten|f[uù]l{1,2}[\s.]*n[aà]m[eê])\b", d.text, re.IGNORECASE))
+            )
+
+            if is_name_label:
                 # Case 1: Name is on the same line after label
                 cleaned = re.sub(
-                    r"^(.*?)(?:h[oọ]\s*(?:v[aà]\s*)?t[eê]n|hova\s*ten|full\s*name)[:\s./-]*",
+                    r"^(.*?)(?:h[oọô0]\s*(?:v[aàâ]\s*)?t[eêéè]n|hova\s*ten|h[oọô0]ten)[\s/:]*(?:f[uù]l{1,2}[\s.]*n[aà]m[eê])?[:\s./-]*",
                     "",
                     d.text,
                     flags=re.IGNORECASE
                 ).strip()
+                cleaned = re.sub(r"^(?:f[uù]l{1,2}[\s.]*n[aà]m[eê])[:\s./-]*", "", cleaned, flags=re.IGNORECASE).strip()
                 cleaned = re.sub(r"[.·•*]$", "", cleaned).strip()
 
-                if cleaned and len(cleaned) >= 3 and cleaned == cleaned.upper():
-                    field.value = cleaned
-                    field.status = FieldStatus.EXTRACTED if d.confidence >= 0.70 else FieldStatus.NEEDS_REVIEW
-                    field.confidence = d.confidence
-                    field.extraction_confidence = 0.95
-                    field.raw_text = d.text
-                    return field
+                if cleaned and len(cleaned) >= 3 and cleaned == cleaned.upper() and not re.search(r"\d", cleaned):
+                    cleaned_norm = remove_accents(cleaned)
+                    if not any(k in cleaned_norm for k in ["CAN CUOC", "CITIZEN", "CONG HOA", "NGAY SINH", "SO /"]):
+                        field.value = cleaned
+                        field.status = FieldStatus.EXTRACTED if d.confidence >= 0.70 else FieldStatus.NEEDS_REVIEW
+                        field.confidence = d.confidence
+                        field.extraction_confidence = 0.95
+                        field.raw_text = d.text
+                        return field
 
                 # Case 2: Name is on the immediate next line
                 if i + 1 < len(detections):
@@ -278,12 +305,14 @@ class CCCDExtractor:
                     nxt_text = nxt.text.strip()
                     nxt_norm = remove_accents(nxt_text.upper())
                     
-                    # Ensure next line is uppercase name and not another header
+                    # Ensure next line is uppercase name and not another header or label
                     is_not_header = not any(k in nxt_norm for k in [
-                        "NGAY SINH", "DATE OF BIRTH", "GIOI TINH", "SEX", "QUOC TICH", "SO ", "NO "
+                        "CAN CUOC", "CITIZEN", "CONG HOA", "NGAY SINH", "NGAYSINH", "DATE OF BIRTH",
+                        "DOEOFTH", "DOB", "GIOI TINH", "SEX", "QUOC TICH", "SO ", "NO ", "QUE QUAN"
                     ])
-                    # Must be mostly uppercase alphabetic
-                    if is_not_header and nxt_text == nxt_text.upper() and len(nxt_text) >= 3:
+                    # Must be mostly uppercase alphabetic person name (no digits)
+                    has_no_digits = not re.search(r"\d", nxt_text)
+                    if is_not_header and has_no_digits and nxt_text == nxt_text.upper() and len(nxt_text) >= 3:
                         field.value = nxt_text
                         field.status = FieldStatus.EXTRACTED if nxt.confidence >= 0.70 else FieldStatus.NEEDS_REVIEW
                         field.confidence = nxt.confidence
@@ -303,7 +332,11 @@ class CCCDExtractor:
 
         for i, d in enumerate(detections):
             norm = remove_accents(d.text.upper())
-            if any(k in norm for k in ["NGAY SINH", "NGAYSINH", "DATE OF BIRTH", "DOB", "BIRTH"]):
+            is_dob_label = (
+                any(k in norm for k in ["NGAY SINH", "NGAYSINH", "DATE OF BIRTH", "DATEOFBIRTH", "DOEOFTH", "DOB", "BIRTH"])
+                or bool(re.search(r"ng[aàá][\s_.]*s[ií]nh|d[aáo0]te?[\s_.]*of?[\s_.]*b[ií]rth?|d[o0]e?ofth", d.text, re.IGNORECASE))
+            )
+            if is_dob_label:
                 # Look for date pattern on same line (e.g. birth26/06/2005)
                 m = re.search(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", d.text)
                 target_d = d
@@ -390,7 +423,11 @@ class CCCDExtractor:
 
         for d in detections:
             norm = remove_accents(d.text.upper())
-            if "QUOC TICH" in norm or "QUOCTICH" in norm or "NATIONALITY" in norm:
+            is_nat_label = (
+                any(k in norm for k in ["QUOC TICH", "QUOCTICH", "NATIONALITY", "NAONAY", "NAONATY"])
+                or bool(re.search(r"qu[oóốô]c\s*t[ií]ch|na[t\w]*i?onali?ty", d.text, re.IGNORECASE))
+            )
+            if is_nat_label:
                 field.raw_text = d.text
                 field.confidence = d.confidence
                 field.extraction_confidence = 0.95
@@ -412,12 +449,20 @@ class CCCDExtractor:
         )
         expiry_indices: Set[int] = set()
 
+        EXPIRY_LABEL_REGEX = re.compile(
+            r"(?:c[oóô][\s_.]*gi[aá][\s_.]*tr[ií]?[\s_.]*[đd]?e?n|gi[aá][\s_.]*tr[ií]?[\s_.]*[đd]?e?n|d[aáo0]te?[\s_.]*(?:of|oo|ot)?[\s_.]*(?:exp[ií]ry|ex|arny|piry)|datootarny|expiry)",
+            re.IGNORECASE
+        )
+
         for idx, d in enumerate(detections):
             norm = remove_accents(d.text.upper())
-            # Match expiry keywords: Co giatrden, Có giá trị đến, Date of expiry, Dateofexpiry
-            is_expiry_line = any(k in norm for k in [
-                "CO GIA TRI", "GIA TRI DEN", "GIATRDEN", "DATE OF EXPIRY", "DATEOFEXPIRY", "EXPIRY", "VAL"
-            ])
+            # Match expiry keywords: Co giatrden, Có giá trị đến, Date of expiry, Dateofexpiry, Datootarny
+            is_expiry_line = (
+                any(k in norm for k in [
+                    "CO GIA TRI", "GIA TRI DEN", "GIATRDEN", "DATE OF EXPIRY", "DATEOFEXPIRY", "EXPIRY", "VAL", "DATOOTARNY"
+                ])
+                or bool(EXPIRY_LABEL_REGEX.search(d.text))
+            )
             if is_expiry_line:
                 expiry_indices.add(idx)
 
@@ -439,6 +484,16 @@ class CCCDExtractor:
 
                 if not m and idx + 1 < len(detections):
                     nxt = detections[idx + 1]
+                    nxt_norm = remove_accents(nxt.text.upper())
+                    if "KHONG THOI HAN" in nxt_norm or "INDEFINITE" in nxt_norm:
+                        field.value = "Không thời hạn"
+                        field.status = FieldStatus.EXTRACTED if nxt.confidence >= 0.70 else FieldStatus.NEEDS_REVIEW
+                        field.confidence = nxt.confidence
+                        field.extraction_confidence = 0.95
+                        field.raw_text = nxt.text
+                        expiry_indices.add(idx + 1)
+                        continue
+
                     m_nxt = re.search(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", nxt.text)
                     if not m_nxt:
                         fixed_nxt = fix_ocr_digit_errors(nxt.text)
@@ -469,6 +524,9 @@ class CCCDExtractor:
                         field.status = FieldStatus.INVALID
                         field.validation_message = f"Ngày hết hạn không hợp lệ trong lịch: {str(e)}."
 
+        if not field.value and field.status == FieldStatus.MISSING:
+            field.validation_message = "Không tìm thấy ngày hết hạn hợp lệ trong ảnh."
+
         return field, expiry_indices
 
     @staticmethod
@@ -484,42 +542,51 @@ class CCCDExtractor:
             if idx in expiry_indices:
                 continue
             norm = remove_accents(d.text.upper())
-            # Match Que quan, Quequan, Place of origin, onigin
-            if any(k in norm for k in ["QUE QUAN", "QUEQUAN", "PLACE OF ORIGIN", "ONIGIN", "ORIGIN"]):
+            # Match Que quan, Quequan, Place of origin, onigin, piaceoforigin
+            is_origin = (
+                any(k in norm for k in ["QUE QUAN", "QUEQUAN", "PLACE OF ORIGIN", "ONIGIN", "ORIGIN", "PIACEOFORIGIN"])
+                or bool(re.search(r"qu[eêéèẻẽẹ\w]{1,5}\s*qu[aáàảãạ\w]{1,5}|quequan|p[l1i]a[cce]e?[\s_.]*(?:of)?[\s_.]*(?:ori[gq][ií]n|onigin|b[ií]rth)", d.text, re.IGNORECASE))
+            )
+            if is_origin:
                 origin_indices.add(idx)
                 
-                # Strip bilingual labels: Quequan / Place of onigin:
+                # Strip bilingual labels: Quequan / Place of onigin / Piaceoforigin:
                 cleaned = re.sub(
-                    r"^(.*?)(?:qu[eêéèẻẽẹ\w]{1,5}\s*qu[aáàảãạ\w]{1,5}|quequan)[\s/]*(?:place\s*of\s*(?:origin|onigin|birth|binth))?[:\s./-]*",
+                    r"^(.*?)(?:qu[eêéèẻẽẹ\w]{1,5}\s*qu[aáàảãạ\w]{1,5}|quequan[\w]?)[\s/.]*(?:p[l1i]a[cce]e?[\s_.]*(?:of)?[\s_.]*(?:ori[gq][ií]n|onigin|b[ií]rth|binth))?[:\s./-]*",
                     "",
                     d.text,
                     flags=re.IGNORECASE
                 ).strip()
-                cleaned = re.sub(r"^(?:place\s*of\s*(?:origin|onigin|birth|binth))[:\s./-]*", "", cleaned, flags=re.IGNORECASE).strip()
+                cleaned = re.sub(
+                    r"^(?:p[l1i]a[cce]e?[\s_.]*(?:of)?[\s_.]*(?:ori[gq][ií]n|onigin|b[ií]rth|binth))[:\s./-]*",
+                    "",
+                    cleaned,
+                    flags=re.IGNORECASE
+                ).strip()
 
                 # Check if this line is purely a label
                 norm_clean = remove_accents(cleaned.upper())
                 clean_words = set(re.findall(r"\b\w+\b", norm_clean))
-                label_words = {"QUE", "QUAN", "QUEQUAN", "PLACE", "OF", "ORIGIN", "ONIGIN", "BIRTH", "BINTH"}
+                label_words = {"QUE", "QUAN", "QUEQUAN", "PLACE", "PIACE", "OF", "ORIGIN", "ONIGIN", "BIRTH", "BINTH"}
                 if not clean_words or clean_words.issubset(label_words):
                     cleaned = ""
 
                 collected_parts = [cleaned] if cleaned else []
 
-                # Look at next line if address continues and is not the residence header
+                # Look at next line if address continues and is not the residence header or expiry
                 if idx + 1 < len(detections) and (idx + 1) not in expiry_indices:
                     nxt = detections[idx + 1]
                     nxt_norm = remove_accents(nxt.text.upper())
                     is_res_header = any(k in nxt_norm for k in [
-                        "NOI THUONG TRU", "NOI THUNG TRU", "RESIDENCE", "CO GIA TRI", "GIATRDEN", "EXPIRY"
+                        "NOI THUONG TRU", "NOT THUONG TRU", "NOI THUNG TRU", "RESIDENCE", "FRESENCE", "CO GIA TRI", "GIATRDEN", "EXPIRY", "DATOOTARNY"
                     ])
-                    if not is_res_header and len(nxt.text.strip()) >= 3:
+                    if not is_res_header and len(nxt.text.strip()) >= 3 and not re.search(r"^\d{12}$", nxt.text.strip()):
                         collected_parts.append(nxt.text.strip())
                         origin_indices.add(idx + 1)
 
-                val = ", ".join(filter(None, collected_parts))
+                val = normalize_address(", ".join(filter(None, collected_parts)))
                 if val:
-                    field.value = normalize_whitespace(val)
+                    field.value = val
                     field.status = FieldStatus.EXTRACTED if d.confidence >= 0.70 else FieldStatus.NEEDS_REVIEW
                     field.confidence = d.confidence
                     field.extraction_confidence = 0.90
@@ -538,25 +605,39 @@ class CCCDExtractor:
             status=FieldStatus.MISSING,
         )
 
+        EXPIRY_LABEL_REGEX = re.compile(
+            r"(?:c[oóô][\s_.]*gi[aá][\s_.]*tr[ií]?[\s_.]*[đd]?e?n|gi[aá][\s_.]*tr[ií]?[\s_.]*[đd]?e?n|d[aáo0]te?[\s_.]*(?:of|oo|ot)?[\s_.]*(?:exp[ií]ry|ex|arny|piry)|datootarny|expiry)",
+            re.IGNORECASE
+        )
+
         for idx, d in enumerate(detections):
             if idx in expiry_indices or idx in origin_indices:
                 continue
             norm = remove_accents(d.text.upper())
-            # Match Noi thuong tru, Noi thung trul, Place of residence
-            if any(k in norm for k in ["NOI THUONG TRU", "THUONG TRU", "THUNG TRU", "PLACE OF RESIDENCE", "RESIDENCE"]):
+            # Match Noi thuong tru, Not thuong tru, Noi thung trul, Place of residence, fresence
+            is_res = (
+                any(k in norm for k in ["NOI THUONG TRU", "NOT THUONG TRU", "THUONG TRU", "THUNG TRU", "PLACE OF RESIDENCE", "RESIDENCE", "FRESENCE"])
+                or bool(re.search(r"n[oơöôóò0t\w]{1,4}i?\s*th[uưüúù\w]{1,4}[oơöôóò\w]{1,4}ng\s*tr[uúüù\w]{1,4}|n[o0]i?\s*thung\s*trul?|p[l1i]a[cce]e?[\s_.]*(?:of)?[\s_.]*r?e?s[ií]dence|fresence", d.text, re.IGNORECASE))
+            )
+            if is_res:
                 # Strip bilingual label prefix: Noi thung trul Place ofresidenceThön ThanhBinh
                 cleaned = re.sub(
-                    r"^(.*?)(?:n[oơöôóò\w]{1,4}i?\s*th[uưüúù\w]{1,4}[oơöôóò\w]{1,4}ng\s*tr[uúüù\w]{1,4}|noi\s*thung\s*trul?)[\s/]*(?:place\s*of\s*residence|residence)?[:\s./-]*",
+                    r"^(.*?)(?:n[oơöôóò0t\w]{1,4}i?\s*th[uưüúù\w]{1,4}[oơöôóò\w]{1,4}ng\s*tr[uúüù\w]{1,4}|n[o0]i?\s*thung\s*trul?)[\s/.]*(?:p[l1i]a[cce]e?[\s_.]*(?:of)?[\s_.]*(?:r?e?s[ií]dence|fresence))?[:\s./-]*",
                     "",
                     d.text,
                     flags=re.IGNORECASE
                 ).strip()
-                cleaned = re.sub(r"^(?:place\s*of\s*residence|residence)[:\s./-]*", "", cleaned, flags=re.IGNORECASE).strip()
+                cleaned = re.sub(
+                    r"^(?:p[l1i]a[cce]e?[\s_.]*(?:of)?[\s_.]*(?:r?e?s[ií]dence|fresence))[:\s./-]*",
+                    "",
+                    cleaned,
+                    flags=re.IGNORECASE
+                ).strip()
 
                 # Check if this line is purely a label
                 norm_clean = remove_accents(cleaned.upper())
                 clean_words = set(re.findall(r"[a-zA-Z0-9]+", norm_clean.replace("'", "")))
-                label_words = {"NOI", "THUONG", "TRU", "THUNG", "TRUL", "PLACE", "OF", "RESIDENCE"}
+                label_words = {"NOI", "NOT", "THUONG", "TRU", "THUNG", "TRUL", "PLACE", "PIACE", "OF", "RESIDENCE", "FRESENCE"}
                 if not clean_words or clean_words.issubset(label_words):
                     cleaned = ""
 
@@ -571,7 +652,9 @@ class CCCDExtractor:
                     nxt_norm = remove_accents(nxt.text.upper())
 
                     # Stop if encounter another header or date
-                    if any(k in nxt_norm for k in ["CO GIA TRI", "GIA TRI DEN", "GIATRDEN", "EXPIRY", "CAN CUOC", "CITIZEN"]):
+                    if any(k in nxt_norm for k in [
+                        "CO GIA TRI", "GIA TRI DEN", "GIATRDEN", "EXPIRY", "CAN CUOC", "CITIZEN", "DATOOTARNY", "QUE QUAN", "SO /"
+                    ]) or EXPIRY_LABEL_REGEX.search(nxt.text):
                         continue
                     if re.search(r"\b\d{2}/\d{2}/\d{4}\b", nxt.text):
                         continue
@@ -580,9 +663,9 @@ class CCCDExtractor:
                     if len(nxt.text.strip()) >= 3 and not re.search(r"^\d{12}$", nxt.text.strip()):
                         collected_parts.append(nxt.text.strip())
 
-                val = ", ".join(filter(None, collected_parts))
+                val = normalize_address(", ".join(filter(None, collected_parts)))
                 if val:
-                    field.value = normalize_whitespace(val)
+                    field.value = val
                     field.status = FieldStatus.EXTRACTED if d.confidence >= 0.70 else FieldStatus.NEEDS_REVIEW
                     field.confidence = d.confidence
                     field.extraction_confidence = 0.90
