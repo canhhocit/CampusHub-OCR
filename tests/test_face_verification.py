@@ -549,3 +549,90 @@ def test_face_benchmark_distribution_reporting():
     assert summary["similarity_distribution"]["genuine"]["count"] == 3
     assert summary["similarity_distribution"]["impostor"]["count"] == 3
 
+
+def test_yunet_score_threshold_configurability_and_runtime_update():
+    """Verify that YuNetSFaceEngine honors score_threshold and can update threshold at runtime."""
+    engine = YuNetSFaceEngine(score_threshold=0.65)
+    assert engine.score_threshold == 0.65
+    engine.set_score_threshold(0.75)
+    assert engine.score_threshold == 0.75
+
+
+def test_selfie_detection_recovered_with_calibrated_threshold():
+    """Verify that a face with score 0.74 is rejected under 0.80 but accepted under 0.70."""
+    verifier = FaceVerifierService(engine=MockFaceEngine())
+    # Mock face with 0.74 confidence
+    verifier.engine.mock_faces_map[600 * 10000 + 400] = [{
+        "box": (150, 80, 200, 200, 0.74),
+        "landmarks": [(180, 130), (280, 130), (230, 180), (200, 230), (260, 230)],
+        "raw": None,
+    }]
+    faces = verifier.engine.detect_faces(np.zeros((400, 600, 3), dtype=np.uint8))
+    face, err_code, _ = verifier._select_selfie_face(faces)
+    assert face is not None
+    assert face["box"][4] == 0.74
+    assert err_code is None
+
+
+def test_cccd_multi_face_selects_primary_large_portrait():
+    """When CCCD has primary large portrait and small secondary ghost portrait, selects the primary portrait."""
+    verifier = FaceVerifierService(engine=MockFaceEngine())
+    img_w, img_h = 1000, 630
+
+    # Face 1: Primary cardholder portrait on left (cx=250 <= 580, area=200*250 = 50000)
+    # Face 2: Secondary miniature ghost portrait on right (cx=850, area=70*90 = 6300)
+    faces = [
+        {"box": (150, 150, 200, 250, 0.99), "landmarks": [], "raw": None},
+        {"box": (815, 400, 70, 90, 0.85), "landmarks": [], "raw": None},
+    ]
+
+    selected, err_code, _ = verifier._select_cccd_portrait_face(faces, img_w, img_h)
+    assert err_code is None
+    assert selected is not None
+    assert selected["box"] == (150, 150, 200, 250, 0.99)
+
+
+def test_cccd_dominant_face_selection_with_margin():
+    """When CCCD has margins (cx > 0.58*w), selects the dominant primary face over background noise."""
+    verifier = FaceVerifierService(engine=MockFaceEngine())
+    img_w, img_h = 1000, 600
+
+    # Face 1: Large face (area=250*300 = 75000) at cx=600 (>580)
+    # Face 2: Tiny false positive (area=40*40 = 1600)
+    faces = [
+        {"box": (475, 100, 250, 300, 0.95), "landmarks": [], "raw": None},
+        {"box": (50, 50, 40, 40, 0.72), "landmarks": [], "raw": None},
+    ]
+
+    selected, err_code, _ = verifier._select_cccd_portrait_face(faces, img_w, img_h)
+    assert err_code is None
+    assert selected is not None
+    assert selected["box"][2] == 250
+
+
+def test_small_portrait_advisory_warning_explaining_degradation():
+    """Portrait crop of 59x78 px produces advisory warning explaining SFace biometric degradation without hard abort."""
+    crop_img = np.full((78, 59, 3), 150, dtype=np.uint8)
+    crop_img[30:35, 15:25] = 40
+    crop_img[30:35, 35:45] = 40
+    crop_img[55:60, 20:40] = 50
+
+    q = FaceQualityValidator.validate_quality(crop_img, (0, 0, 59, 78), source_type="card")
+    assert q.is_valid is True  # Passes quality gate (advisory warning only)
+    assert any("nhỏ hơn khuyến nghị" in w for w in q.warnings)
+    assert any("SFace" in w for w in q.warnings)
+
+
+def test_benchmark_runner_calculates_rate_metrics():
+    """Verify evaluate_face calculates rate percentages correctly."""
+    import evaluate_face
+    verifier = FaceVerifierService(engine=MockFaceEngine())
+    pairs = evaluate_face.create_synthetic_smoke_test_pairs(count=4)
+    summary = evaluate_face.run_benchmark(pairs, verifier, is_synthetic=True, thresholds=[0.363])
+
+    assert "detection_success_rate_percent" in summary
+    assert "quality_rejection_rate_percent" in summary
+    assert "matching_executed_rate_percent" in summary
+    assert summary["matching_executed_rate_percent"] == 100.0
+
+

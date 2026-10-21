@@ -32,7 +32,7 @@ class Settings(BaseModel):
     FACE_DETECTOR_MODEL: str = "face_detection_yunet_2023mar.onnx"
     FACE_RECOGNIZER_MODEL: str = "face_recognition_sface_2021dec.onnx"
     FACE_MATCH_THRESHOLD: float = float(os.getenv("FACE_MATCH_THRESHOLD", "0.363"))
-    FACE_SCORE_THRESHOLD: float = 0.80
+    FACE_SCORE_THRESHOLD: float = float(os.getenv("FACE_SCORE_THRESHOLD", "0.70"))
     FACE_MIN_SIZE: int = 60
     ALLOW_MOCK_FACE: bool = os.getenv("ALLOW_MOCK_FACE", "false").lower() == "true"
     

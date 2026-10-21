@@ -103,7 +103,8 @@ class FaceQualityValidator:
             )
         elif crop_w < settings.FACE_MIN_SIZE or crop_h < settings.FACE_MIN_SIZE:
             warnings.append(
-                f"Kích thước khuôn mặt ({crop_w}x{crop_h}px) nhỏ hơn khuyến nghị ({settings.FACE_MIN_SIZE}px)."
+                f"Kích thước khuôn mặt ({crop_w}x{crop_h}px) nhỏ hơn khuyến nghị ({settings.FACE_MIN_SIZE}px). "
+                "Độ phân giải thấp có thể làm giảm mạnh độ tương đồng sinh trắc học SFace do việc nội suy phóng to không thể tái tạo chi tiết nhận dạng."
             )
 
         # 2. Brightness / Illumination check
@@ -201,10 +202,12 @@ class YuNetSFaceEngine(FaceEngineInterface):
         self,
         detector_path: Optional[str] = None,
         recognizer_path: Optional[str] = None,
+        score_threshold: Optional[float] = None,
     ):
         base_dir = settings.FACE_MODEL_DIR
         self.detector_path = detector_path or os.path.join(base_dir, settings.FACE_DETECTOR_MODEL)
         self.recognizer_path = recognizer_path or os.path.join(base_dir, settings.FACE_RECOGNIZER_MODEL)
+        self.score_threshold = float(score_threshold if score_threshold is not None else settings.FACE_SCORE_THRESHOLD)
 
         if not os.path.exists(self.detector_path):
             raise FileNotFoundError(
@@ -222,11 +225,16 @@ class YuNetSFaceEngine(FaceEngineInterface):
             self.detector_path,
             "",
             (320, 320),
-            score_threshold=settings.FACE_SCORE_THRESHOLD,
+            score_threshold=self.score_threshold,
             nms_threshold=0.3,
             top_k=5000,
         )
         self._recognizer = cv2.FaceRecognizerSF.create(self.recognizer_path, "")
+
+    def set_score_threshold(self, score_threshold: float) -> None:
+        """Dynamically reconfigures YuNet score threshold at runtime."""
+        self.score_threshold = float(score_threshold)
+        self._detector.setScoreThreshold(self.score_threshold)
 
     def detect_faces(self, image: np.ndarray) -> list[dict]:
         h, w = image.shape[:2]
@@ -371,18 +379,39 @@ class FaceVerifierService:
         img_w: int,
         img_h: int,
     ) -> Tuple[Optional[dict], Optional[str], Optional[str]]:
-        """Filter face detection for the printed cardholder portrait on Vietnamese CCCD."""
+        """Filter face detection for the printed cardholder portrait on Vietnamese CCCD.
+
+        Handles:
+        1. Single detected face: returned directly.
+        2. Dominant face: if one face is significantly larger (area >= 2.0x any other detection),
+           it is selected as the primary cardholder portrait over miniature ghost portraits, emblems, or artifacts.
+        3. Multiple faces of comparable size: disambiguates using the cardholder portrait zone
+           on the left side of the card (cx <= 0.58 * img_w, 0.10 * img_h <= cy <= 0.95 * img_h).
+        """
         if not faces:
             return None, "NO_FACE_DETECTED", "Không tìm thấy khuôn mặt chân dung trong ảnh thẻ CCCD."
 
+        # If only 1 face detected, return it directly
+        if len(faces) == 1:
+            return faces[0], None, None
+
+        # Sort all faces by bounding box area (largest first)
+        sorted_by_area = sorted(faces, key=lambda c: c["box"][2] * c["box"][3], reverse=True)
+        primary_face = sorted_by_area[0]
+        primary_area = primary_face["box"][2] * primary_face["box"][3]
+        second_area = sorted_by_area[1]["box"][2] * sorted_by_area[1]["box"][3]
+
+        # Case 1: Dominant portrait (main portrait is substantially larger than secondary ghost/watermark)
+        if primary_area >= 2.0 * max(1, second_area):
+            return primary_face, None, None
+
+        # Case 2: Faces of comparable size (e.g. multiple people). Use left-side portrait zone constraint
         candidates = []
         for f in faces:
             x, y, w, h, _ = f["box"]
             cx = x + w / 2.0
             cy = y + h / 2.0
-
-            # Cardholder portrait zone constraint
-            if (cx <= 0.52 * img_w) and (0.12 * img_h <= cy <= 0.92 * img_h):
+            if (cx <= 0.58 * img_w) and (0.10 * img_h <= cy <= 0.95 * img_h):
                 candidates.append(f)
 
         if len(candidates) == 1:
@@ -391,8 +420,6 @@ class FaceVerifierService:
             candidates.sort(key=lambda c: c["box"][2] * c["box"][3], reverse=True)
             return candidates[0], None, None
         else:
-            if len(faces) == 1:
-                return faces[0], None, None
             return (
                 None,
                 "CARD_PORTRAIT_NOT_FOUND",

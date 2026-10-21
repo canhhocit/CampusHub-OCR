@@ -186,9 +186,13 @@ def run_benchmark(
         "genuine_pairs": genuine_pairs_count,
         "impostor_pairs": impostor_pairs_count,
         "detection_failures": detection_failures,
+        "detection_success_rate_percent": round((total_pairs * 2 - (detection_failures['card'] + detection_failures['selfie'])) / max(1, total_pairs * 2) * 100, 2),
+        "detection_failure_rate_percent": round((detection_failures['card'] + detection_failures['selfie']) / max(1, total_pairs * 2) * 100, 2),
         "quality_rejections": quality_rejections,
-        "quality_warnings_total": quality_warnings_count,
+        "quality_rejection_rate_percent": round(quality_rejections['total_pairs_blocked'] / max(1, total_pairs) * 100, 2),
         "matching_executed": matching_executed_count,
+        "matching_executed_rate_percent": round(matching_executed_count / max(1, total_pairs) * 100, 2),
+        "quality_warnings_total": quality_warnings_count,
         "similarity_distribution": similarity_distribution,
         "latencies_ms": {
             "mean": round(float(np.mean(latencies)), 2) if latencies else 0.0,
@@ -205,10 +209,9 @@ def run_benchmark(
 
     print("\nBENCHMARK RESULTS SUMMARY:")
     print(f"- Mean Latency: {summary['latencies_ms']['mean']} ms (p95: {summary['latencies_ms']['p95']} ms)")
-    print(f"- Pairs Matching Executed: {matching_executed_count}/{total_pairs}")
-    print(f"- Pairs Blocked by Quality Gate: {quality_rejections['total_pairs_blocked']}/{total_pairs}")
-    print(f"- Card Face Detection Failures: {detection_failures['card']}/{total_pairs} (Quality Rejections: {quality_rejections['card']})")
-    print(f"- Selfie Face Detection Failures: {detection_failures['selfie']}/{total_pairs} (Quality Rejections: {quality_rejections['selfie']})")
+    print(f"- Detection Success Rate: {summary['detection_success_rate_percent']}% (Failures: Card={detection_failures['card']}, Selfie={detection_failures['selfie']})")
+    print(f"- Pairs Matching Executed: {matching_executed_count}/{total_pairs} ({summary['matching_executed_rate_percent']}%)")
+    print(f"- Pairs Blocked by Quality Gate: {quality_rejections['total_pairs_blocked']}/{total_pairs} ({summary['quality_rejection_rate_percent']}%)")
     print(f"- Quality Warnings Logged: {quality_warnings_count}")
     print(f"- Genuine Similarity: Mean={similarity_distribution['genuine']['mean']}, Range=[{similarity_distribution['genuine']['min']}, {similarity_distribution['genuine']['max']}]")
     print(f"- Impostor Similarity: Mean={similarity_distribution['impostor']['mean']}, Range=[{similarity_distribution['impostor']['min']}, {similarity_distribution['impostor']['max']}]")
