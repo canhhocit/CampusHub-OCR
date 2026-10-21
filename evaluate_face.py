@@ -70,8 +70,11 @@ def run_benchmark(
     results = []
     latencies = []
     detection_failures = {"card": 0, "selfie": 0}
-    quality_rejections = {"card": 0, "selfie": 0}
+    quality_rejections = {"card": 0, "selfie": 0, "total_pairs_blocked": 0}
     quality_warnings_count = 0
+    matching_executed_count = 0
+    genuine_scores = []
+    impostor_scores = []
 
     for idx, pair in enumerate(pairs, start=1):
         pair_id = pair.get("id", f"pair_{idx}")
@@ -85,16 +88,23 @@ def run_benchmark(
         latencies.append(elapsed_ms)
 
         if not resp.card_face.detected:
-            if resp.card_face.error_code == "LOW_QUALITY_FACE":
-                quality_rejections["card"] += 1
-            else:
-                detection_failures["card"] += 1
+            detection_failures["card"] += 1
+        elif resp.card_face.quality and not resp.card_face.quality.is_valid:
+            quality_rejections["card"] += 1
 
         if not resp.selfie_face.detected:
-            if resp.selfie_face.error_code == "LOW_QUALITY_FACE":
-                quality_rejections["selfie"] += 1
+            detection_failures["selfie"] += 1
+        elif resp.selfie_face.quality and not resp.selfie_face.quality.is_valid:
+            quality_rejections["selfie"] += 1
+
+        if resp.pipeline_state == "BLOCKED_QUALITY":
+            quality_rejections["total_pairs_blocked"] += 1
+        elif resp.pipeline_state == "MATCHED":
+            matching_executed_count += 1
+            if is_same:
+                genuine_scores.append(resp.similarity_score)
             else:
-                detection_failures["selfie"] += 1
+                impostor_scores.append(resp.similarity_score)
 
         if resp.warnings:
             quality_warnings_count += len(resp.warnings)
@@ -102,11 +112,32 @@ def run_benchmark(
         results.append({
             "pair_id": pair_id,
             "ground_truth_same": is_same,
+            "pipeline_state": resp.pipeline_state,
             "similarity_score": resp.similarity_score,
-            "card_valid": resp.card_face.detected,
-            "selfie_valid": resp.selfie_face.detected,
+            "success": resp.success,
+            "match": resp.match,
+            "card_valid": resp.card_face.detected and (resp.card_face.quality.is_valid if resp.card_face.quality else False),
+            "selfie_valid": resp.selfie_face.detected and (resp.selfie_face.quality.is_valid if resp.selfie_face.quality else False),
             "warnings": resp.warnings,
         })
+
+    def calc_dist(scores: List[float]) -> Dict[str, Any]:
+        if not scores:
+            return {"count": 0, "mean": 0.0, "median": 0.0, "min": 0.0, "max": 0.0, "std": 0.0}
+        arr = np.array(scores, dtype=np.float32)
+        return {
+            "count": len(scores),
+            "mean": round(float(np.mean(arr)), 4),
+            "median": round(float(np.median(arr)), 4),
+            "min": round(float(np.min(arr)), 4),
+            "max": round(float(np.max(arr)), 4),
+            "std": round(float(np.std(arr)), 4),
+        }
+
+    similarity_distribution = {
+        "genuine": calc_dist(genuine_scores),
+        "impostor": calc_dist(impostor_scores),
+    }
 
     # Evaluate metrics across threshold grid
     threshold_metrics = {}
@@ -114,7 +145,7 @@ def run_benchmark(
     for th in thresholds:
         tp, fp, tn, fn = 0, 0, 0, 0
         for r in results:
-            predicted_same = (r["card_valid"] and r["selfie_valid"] and r["similarity_score"] >= th)
+            predicted_same = (r["success"] and r["similarity_score"] >= th)
             actual_same = r["ground_truth_same"]
 
             if predicted_same and actual_same:
@@ -157,6 +188,8 @@ def run_benchmark(
         "detection_failures": detection_failures,
         "quality_rejections": quality_rejections,
         "quality_warnings_total": quality_warnings_count,
+        "matching_executed": matching_executed_count,
+        "similarity_distribution": similarity_distribution,
         "latencies_ms": {
             "mean": round(float(np.mean(latencies)), 2) if latencies else 0.0,
             "median": round(float(np.median(latencies)), 2) if latencies else 0.0,
@@ -172,9 +205,13 @@ def run_benchmark(
 
     print("\nBENCHMARK RESULTS SUMMARY:")
     print(f"- Mean Latency: {summary['latencies_ms']['mean']} ms (p95: {summary['latencies_ms']['p95']} ms)")
+    print(f"- Pairs Matching Executed: {matching_executed_count}/{total_pairs}")
+    print(f"- Pairs Blocked by Quality Gate: {quality_rejections['total_pairs_blocked']}/{total_pairs}")
     print(f"- Card Face Detection Failures: {detection_failures['card']}/{total_pairs} (Quality Rejections: {quality_rejections['card']})")
     print(f"- Selfie Face Detection Failures: {detection_failures['selfie']}/{total_pairs} (Quality Rejections: {quality_rejections['selfie']})")
     print(f"- Quality Warnings Logged: {quality_warnings_count}")
+    print(f"- Genuine Similarity: Mean={similarity_distribution['genuine']['mean']}, Range=[{similarity_distribution['genuine']['min']}, {similarity_distribution['genuine']['max']}]")
+    print(f"- Impostor Similarity: Mean={similarity_distribution['impostor']['mean']}, Range=[{similarity_distribution['impostor']['min']}, {similarity_distribution['impostor']['max']}]")
     print("\nMETRICS BY THRESHOLD:")
     print(f"{'Threshold':<10} | {'FAR (%)':<10} | {'FRR (%)':<10} | {'Acc (%)':<10} | {'F1 (%)':<10}")
     print("-" * 56)

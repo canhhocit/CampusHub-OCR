@@ -21,6 +21,8 @@ def test_index_ui_endpoint(client):
     assert "selfieFileInput" in response.text
     assert "openWebcamBtn" in response.text
     assert "submitFaceBtn" in response.text
+    assert "proceedToFaceBtn" in response.text
+    assert "ocrProceedBanner" in response.text
 
 def test_ocr_endpoint_validation_error_on_empty(client):
     response = client.post(

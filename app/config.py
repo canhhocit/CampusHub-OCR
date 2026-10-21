@@ -35,6 +35,22 @@ class Settings(BaseModel):
     FACE_SCORE_THRESHOLD: float = 0.80
     FACE_MIN_SIZE: int = 60
     ALLOW_MOCK_FACE: bool = os.getenv("ALLOW_MOCK_FACE", "false").lower() == "true"
+    
+    # Face Quality Validator thresholds (domain-specific: printed CCCD vs live selfie)
+    FACE_SERIOUS_MIN_SIZE: int = 50
+    FACE_CARD_SERIOUS_MIN_BLUR: float = 3.0       # Severe blur threshold for printed CCCD card portraits
+    FACE_CARD_RECOMMENDED_MIN_BLUR: float = 12.0  # Advisory warning threshold for soft card portraits
+    FACE_SELFIE_SERIOUS_MIN_BLUR: float = 5.0     # Severe blur threshold for live selfies
+    FACE_SELFIE_RECOMMENDED_MIN_BLUR: float = 25.0 # Advisory warning threshold for live selfies
+    FACE_SERIOUS_MIN_BRIGHTNESS: float = 15.0
+    FACE_SERIOUS_MAX_BRIGHTNESS: float = 245.0
+    FACE_RECOMMENDED_MIN_BRIGHTNESS: float = 35.0
+    FACE_RECOMMENDED_MAX_BRIGHTNESS: float = 225.0
+
+    # Diagnostic & Debug options (strictly for local development, disabled by default)
+    FACE_DEBUG_SAVE_CROPS: bool = os.getenv("FACE_DEBUG_SAVE_CROPS", "false").lower() == "true"
+    FACE_DEBUG_DIR: str = os.getenv("FACE_DEBUG_DIR", "scratch/face_debug")
+
     FACE_DISCLAIMER: str = (
         "Kết quả so khớp khuôn mặt 1:1 mang tính chất thử nghiệm thuật toán và đối sánh sinh trắc học, "
         "không cấu thành việc định danh pháp lý hoặc kiểm tra chống giả mạo (liveness/anti-spoofing)."

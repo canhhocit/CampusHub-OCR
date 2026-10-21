@@ -27,6 +27,8 @@ class FaceQualityCheck(BaseModel):
 class FaceDetectionResult(BaseModel):
     detected: bool
     count: int = 0
+    image_width: Optional[int] = None
+    image_height: Optional[int] = None
     box: Optional[FaceBoundingBox] = None
     landmarks: Optional[FaceLandmarks] = None
     quality: Optional[FaceQualityCheck] = None
@@ -47,9 +49,17 @@ class FaceVerificationResponse(BaseModel):
     threshold: float
     card_face: FaceDetectionResult
     selfie_face: FaceDetectionResult
+    pipeline_state: str = Field(
+        default="MATCHED",
+        description="Trạng thái thực thi pipeline: MATCHED, BLOCKED_NO_FACE, BLOCKED_MULTIPLE_FACES, BLOCKED_QUALITY, FAILED_EXTRACTION"
+    )
     warnings: list[str] = Field(default_factory=list)
     processing_time_ms: float
     disclaimer: str
+    diagnostics: Optional[dict] = Field(
+        default=None,
+        description="Thông tin chẩn đoán kỹ thuật chi tiết phục vụ kiểm thử và phát triển (khi bật DEBUG)."
+    )
 
 class FaceHealthResponse(BaseModel):
     status: str

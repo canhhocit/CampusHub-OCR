@@ -15,22 +15,58 @@ from app.schemas.face import (
 )
 
 
+def save_debug_crop(crop_img: np.ndarray, label: str) -> Optional[str]:
+    """Saves an unaligned or aligned face crop locally ONLY when FACE_DEBUG_SAVE_CROPS=true.
+
+    Strictly disabled by default. Never outputs PII or sensitive user data.
+    """
+    if not settings.FACE_DEBUG_SAVE_CROPS or crop_img is None or crop_img.size == 0:
+        return None
+    try:
+        out_dir = settings.FACE_DEBUG_DIR
+        os.makedirs(out_dir, exist_ok=True)
+        ts = int(time.time() * 1000)
+        filename = f"{ts}_{label}.jpg"
+        filepath = os.path.join(out_dir, filename)
+        cv2.imwrite(filepath, crop_img)
+        return filepath
+    except Exception:
+        return None
+
+
 class FaceQualityValidator:
     """Validates face crop resolution, sharpness, illumination, and geometry.
 
     Distinguishes strictly between:
-    - Serious quality defects (is_valid = False): causes automatic rejection.
-    - Mild sub-optimal warnings (is_valid = True): warns user while allowing matching.
+    - Serious quality defects (is_valid = False): unrecoverable defect that prevents biometric alignment/matching.
+    - Mild sub-optimal warnings (is_valid = True): warns user while allowing feature extraction & matching.
+
+    NOTE: Printed ID card (CCCD) portraits and live camera selfies have different physical characteristics:
+    - Printed portraits: diffuse studio lighting, dye-sublimation print dots, smooth skin tones, no digital sharpening.
+      Normal Laplacian variance on completely clear CCCD portraits typically ranges from 4.0 to 15.0.
+    - Selfies: sensor shot noise and camera ISP sharpening filters, typically ranging from 40.0 to 250.0+.
     """
 
-    # Serious rejection criteria thresholds
-    SERIOUS_MIN_SIZE: int = 50
-    SERIOUS_MIN_BLUR: float = 15.0
-    SERIOUS_MIN_BRIGHTNESS: float = 20.0
-    SERIOUS_MAX_BRIGHTNESS: float = 240.0
+    SERIOUS_MIN_SIZE: int = settings.FACE_SERIOUS_MIN_SIZE
+    SERIOUS_MIN_BRIGHTNESS: float = settings.FACE_SERIOUS_MIN_BRIGHTNESS
+    SERIOUS_MAX_BRIGHTNESS: float = settings.FACE_SERIOUS_MAX_BRIGHTNESS
+
+    CARD_SERIOUS_MIN_BLUR: float = settings.FACE_CARD_SERIOUS_MIN_BLUR
+    CARD_RECOMMENDED_MIN_BLUR: float = settings.FACE_CARD_RECOMMENDED_MIN_BLUR
+
+    SELFIE_SERIOUS_MIN_BLUR: float = settings.FACE_SELFIE_SERIOUS_MIN_BLUR
+    SELFIE_RECOMMENDED_MIN_BLUR: float = settings.FACE_SELFIE_RECOMMENDED_MIN_BLUR
+
+    GENERAL_SERIOUS_MIN_BLUR: float = 5.0
+    GENERAL_RECOMMENDED_MIN_BLUR: float = 25.0
 
     @classmethod
-    def validate_quality(cls, image: np.ndarray, bbox: Tuple[int, int, int, int]) -> FaceQualityCheck:
+    def validate_quality(
+        cls,
+        image: np.ndarray,
+        bbox: Tuple[int, int, int, int],
+        source_type: str = "general",
+    ) -> FaceQualityCheck:
         x, y, w, h = bbox
         img_h, img_w = image.shape[:2]
 
@@ -80,23 +116,50 @@ class FaceQualityValidator:
             serious_failures.append(
                 f"Khuôn mặt bị lóa sáng/cháy sáng nghiêm trọng ({brightness}/255 > {cls.SERIOUS_MAX_BRIGHTNESS})."
             )
-        elif brightness < 40.0:
-            warnings.append(f"Khuôn mặt thiếu sáng ({brightness}/255). Nên chụp ở nơi đủ sáng hơn.")
-        elif brightness > 225.0:
-            warnings.append(f"Khuôn mặt có vùng bị lóa sáng ({brightness}/255).")
-
-        # 3. Sharpness / Blur check (Laplacian variance)
-        blur_score = round(float(cv2.Laplacian(gray, cv2.CV_64F).var()), 2)
-        if blur_score < cls.SERIOUS_MIN_BLUR:
-            serious_failures.append(
-                f"Khuôn mặt bị nhòe mờ/mất nét nghiêm trọng (Laplacian: {blur_score} < {cls.SERIOUS_MIN_BLUR})."
+        elif brightness < settings.FACE_RECOMMENDED_MIN_BRIGHTNESS:
+            warnings.append(
+                f"Khuôn mặt thiếu sáng ({brightness}/255). Nên chụp ở nơi đủ sáng hơn."
             )
-        elif blur_score < 35.0:
-            warnings.append(f"Khuôn mặt hơi mờ nét hoặc có hiện tượng rung tay (Laplacian: {blur_score}).")
+        elif brightness > settings.FACE_RECOMMENDED_MAX_BRIGHTNESS:
+            warnings.append(
+                f"Khuôn mặt có vùng bị lóa sáng ({brightness}/255)."
+            )
+
+        # 3. Sharpness / Blur check (Laplacian variance) adapted by domain
+        if source_type == "card":
+            serious_min_blur = cls.CARD_SERIOUS_MIN_BLUR
+            recommended_min_blur = cls.CARD_RECOMMENDED_MIN_BLUR
+        elif source_type == "selfie":
+            serious_min_blur = cls.SELFIE_SERIOUS_MIN_BLUR
+            recommended_min_blur = cls.SELFIE_RECOMMENDED_MIN_BLUR
+        else:
+            serious_min_blur = cls.GENERAL_SERIOUS_MIN_BLUR
+            recommended_min_blur = cls.GENERAL_RECOMMENDED_MIN_BLUR
+
+        blur_score = round(float(cv2.Laplacian(gray, cv2.CV_64F).var()), 2)
+        if blur_score < serious_min_blur:
+            serious_failures.append(
+                f"Khuôn mặt bị nhòe mờ/mất nét nghiêm trọng (Laplacian: {blur_score} < {serious_min_blur})."
+            )
+        elif blur_score < recommended_min_blur:
+            if source_type == "card":
+                warnings.append(
+                    f"Ảnh thẻ CCCD có độ sắc nét trung bình (Laplacian: {blur_score} < {recommended_min_blur}), thường do tính chất hạt in hoặc ảnh chụp lại thẻ; hệ thống vẫn tiếp tục đối sánh."
+                )
+            else:
+                warnings.append(
+                    f"Khuôn mặt hơi mờ nét hoặc có hiện tượng rung tay (Laplacian: {blur_score} < {recommended_min_blur})."
+                )
 
         # 4. Aspect ratio check
-        if aspect_ratio < 0.50 or aspect_ratio > 1.50:
-            warnings.append(f"Tỷ lệ khung hình khuôn mặt bất thường ({aspect_ratio}), có thể do góc chụp quá nghiêng.")
+        if aspect_ratio < 0.35 or aspect_ratio > 2.50:
+            serious_failures.append(
+                f"Tỷ lệ khung hình khuôn mặt bất thường nghiêm trọng ({aspect_ratio}), vùng crop có thể bị cắt xén."
+            )
+        elif aspect_ratio < 0.50 or aspect_ratio > 1.50:
+            warnings.append(
+                f"Tỷ lệ khung hình khuôn mặt hơi lệch chuẩn ({aspect_ratio}), có thể do góc chụp nghiêng."
+            )
 
         is_valid = len(serious_failures) == 0
         all_warnings = serious_failures + warnings
@@ -121,7 +184,7 @@ class FaceEngineInterface(ABC):
         pass
 
     @abstractmethod
-    def extract_embedding(self, image: np.ndarray, face_data: dict) -> np.ndarray:
+    def extract_embedding(self, image: np.ndarray, face_data: dict, label: str = "face") -> np.ndarray:
         """Align face crop and extract a 128-dimensional embedding vector."""
         pass
 
@@ -191,8 +254,17 @@ class YuNetSFaceEngine(FaceEngineInterface):
             })
         return results
 
-    def extract_embedding(self, image: np.ndarray, face_data: dict) -> np.ndarray:
+    def extract_embedding(self, image: np.ndarray, face_data: dict, label: str = "face") -> np.ndarray:
         aligned = self._recognizer.alignCrop(image, face_data["raw"])
+        if settings.FACE_DEBUG_SAVE_CROPS:
+            try:
+                x, y, bw, bh = [int(v) for v in face_data["box"][:4]]
+                img_h, img_w = image.shape[:2]
+                raw_crop = image[max(0, y):min(img_h, y + bh), max(0, x):min(img_w, x + bw)]
+                save_debug_crop(raw_crop, f"{label}_bbox_crop")
+                save_debug_crop(aligned, f"{label}_aligned_112x112")
+            except Exception:
+                pass
         feat = self._recognizer.feature(aligned)
         return feat
 
@@ -240,7 +312,7 @@ class MockFaceEngine(FaceEngineInterface):
             "raw": np.array([x, y, w, h, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.98], dtype=np.float32),
         }]
 
-    def extract_embedding(self, image: np.ndarray, face_data: dict) -> np.ndarray:
+    def extract_embedding(self, image: np.ndarray, face_data: dict, label: str = "face") -> np.ndarray:
         mean_val = float(np.mean(image))
         vec = np.ones((1, 128), dtype=np.float32) * (mean_val / 255.0)
         norm = np.linalg.norm(vec)
@@ -347,13 +419,17 @@ class FaceVerifierService:
         face_data: Optional[dict],
         image: np.ndarray,
         count: int,
+        source_type: str = "general",
         error_code: Optional[str] = None,
         error_message: Optional[str] = None,
     ) -> FaceDetectionResult:
+        img_h, img_w = image.shape[:2]
         if face_data is None:
             return FaceDetectionResult(
                 detected=False,
                 count=count,
+                image_width=img_w,
+                image_height=img_h,
                 box=None,
                 landmarks=None,
                 quality=None,
@@ -362,9 +438,8 @@ class FaceVerifierService:
             )
 
         x, y, w, h, score = face_data["box"]
-        quality = FaceQualityValidator.validate_quality(image, (x, y, w, h))
+        quality = FaceQualityValidator.validate_quality(image, (x, y, w, h), source_type=source_type)
 
-        # Check for serious quality failure
         effective_error_code = error_code
         effective_error_message = error_message
         if not quality.is_valid:
@@ -383,8 +458,10 @@ class FaceVerifierService:
             )
 
         return FaceDetectionResult(
-            detected=quality.is_valid,
+            detected=True,  # Factually detected by YuNet detector
             count=count,
+            image_width=img_w,
+            image_height=img_h,
             box=FaceBoundingBox(x=x, y=y, width=w, height=h, confidence=round(score, 4)),
             landmarks=landmarks_obj,
             quality=quality,
@@ -431,13 +508,15 @@ class FaceVerifierService:
                 f"Lỗi hệ thống khi nhận diện khuôn mặt trên thẻ CCCD: {str(e)}",
                 start_time,
                 effective_threshold,
+                pipeline_state="FAILED_DETECTION",
             )
 
         card_face, card_err_code, card_err_msg = self._select_cccd_portrait_face(
             card_all_faces, card_w, card_h
         )
         card_result = self._to_detection_result(
-            card_face, card_image, len(card_all_faces), card_err_code, card_err_msg
+            card_face, card_image, len(card_all_faces), source_type="card",
+            error_code=card_err_code, error_message=card_err_msg
         )
 
         # 2. Detect faces in Selfie image
@@ -448,29 +527,48 @@ class FaceVerifierService:
                 f"Lỗi hệ thống khi nhận diện khuôn mặt trong ảnh selfie: {str(e)}",
                 start_time,
                 effective_threshold,
+                pipeline_state="FAILED_DETECTION",
             )
 
         selfie_face, selfie_err_code, selfie_err_msg = self._select_selfie_face(selfie_all_faces)
         selfie_result = self._to_detection_result(
-            selfie_face, selfie_image, len(selfie_all_faces), selfie_err_code, selfie_err_msg
+            selfie_face, selfie_image, len(selfie_all_faces), source_type="selfie",
+            error_code=selfie_err_code, error_message=selfie_err_msg
         )
 
-        # 3. Check for abort due to detection failure OR serious quality defect
-        card_has_serious_defect = card_result.quality and not card_result.quality.is_valid
-        selfie_has_serious_defect = selfie_result.quality and not selfie_result.quality.is_valid
+        # 3. Check for HARD BLOCKERS (unrecoverable defects that prevent feature extraction)
+        card_blocked_no_face = not card_result.detected
+        selfie_blocked_no_face = not selfie_result.detected
+        card_blocked_quality = bool(card_result.quality and not card_result.quality.is_valid)
+        selfie_blocked_quality = bool(selfie_result.quality and not selfie_result.quality.is_valid)
 
-        if not card_result.detected or not selfie_result.detected or card_has_serious_defect or selfie_has_serious_defect:
-            if card_has_serious_defect and card_result.quality:
+        if card_blocked_no_face or selfie_blocked_no_face or card_blocked_quality or selfie_blocked_quality:
+            if selfie_err_code == "MULTIPLE_FACES_DETECTED":
+                pipeline_state = "BLOCKED_MULTIPLE_FACES"
+            elif card_blocked_quality or selfie_blocked_quality:
+                pipeline_state = "BLOCKED_QUALITY"
+            else:
+                pipeline_state = "BLOCKED_NO_FACE"
+
+            if card_blocked_quality and card_result.quality:
                 for w in card_result.quality.warnings:
-                    warnings.append(f"Ảnh thẻ CCCD lỗi chất lượng: {w}")
-            elif not card_result.detected and card_result.error_message:
+                    warnings.append(f"Ảnh thẻ CCCD lỗi chất lượng nghiêm trọng: {w}")
+            elif card_blocked_no_face and card_result.error_message:
                 warnings.append(f"Ảnh thẻ CCCD: {card_result.error_message}")
 
-            if selfie_has_serious_defect and selfie_result.quality:
+            if selfie_blocked_quality and selfie_result.quality:
                 for w in selfie_result.quality.warnings:
-                    warnings.append(f"Ảnh selfie lỗi chất lượng: {w}")
-            elif not selfie_result.detected and selfie_result.error_message:
+                    warnings.append(f"Ảnh selfie lỗi chất lượng nghiêm trọng: {w}")
+            elif selfie_blocked_no_face and selfie_result.error_message:
                 warnings.append(f"Ảnh selfie: {selfie_result.error_message}")
+
+            diagnostics = self._build_diagnostics(
+                card_w, card_h, selfie_w, selfie_h,
+                card_result, selfie_result,
+                pipeline_state=pipeline_state,
+                blocked_before_matching=True,
+                matching_executed=False,
+            )
 
             elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
             return FaceVerificationResponse(
@@ -481,23 +579,33 @@ class FaceVerifierService:
                 threshold=effective_threshold,
                 card_face=card_result,
                 selfie_face=selfie_result,
+                pipeline_state=pipeline_state,
                 warnings=warnings,
                 processing_time_ms=elapsed_ms,
                 disclaimer=settings.FACE_DISCLAIMER,
+                diagnostics=diagnostics,
             )
 
-        # 4. Append mild quality warnings (if any)
+        # 4. Append ADVISORY quality warnings (if any)
         if card_result.quality and card_result.quality.warnings:
             for w in card_result.quality.warnings:
-                warnings.append(f"Ảnh thẻ: {w}")
+                warnings.append(f"Ảnh thẻ CCCD: {w}")
         if selfie_result.quality and selfie_result.quality.warnings:
             for w in selfie_result.quality.warnings:
                 warnings.append(f"Ảnh selfie: {w}")
 
         # 5. Extract embeddings and calculate cosine similarity
         try:
-            feat_card = self.engine.extract_embedding(card_image, card_face)
-            feat_selfie = self.engine.extract_embedding(selfie_image, selfie_face)
+            try:
+                feat_card = self.engine.extract_embedding(card_image, card_face, label="card")
+            except TypeError:
+                feat_card = self.engine.extract_embedding(card_image, card_face)
+
+            try:
+                feat_selfie = self.engine.extract_embedding(selfie_image, selfie_face, label="selfie")
+            except TypeError:
+                feat_selfie = self.engine.extract_embedding(selfie_image, selfie_face)
+
             sim_score = self.engine.compute_similarity(feat_card, feat_selfie)
         except Exception as e:
             return self._build_error_response(
@@ -506,13 +614,13 @@ class FaceVerifierService:
                 effective_threshold,
                 card_result,
                 selfie_result,
+                pipeline_state="FAILED_EXTRACTION",
             )
 
         sim_score = round(float(sim_score), 4)
         is_match = bool(sim_score >= effective_threshold)
 
         # Compute heuristic display confidence score [0.0, 1.0]
-        # (NOT a calibrated statistical posterior probability)
         if sim_score >= effective_threshold:
             denom = max(0.001, 1.0 - effective_threshold)
             confidence = 0.5 + 0.5 * min(1.0, (sim_score - effective_threshold) / denom)
@@ -523,6 +631,16 @@ class FaceVerifierService:
 
         elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
+        diagnostics = self._build_diagnostics(
+            card_w, card_h, selfie_w, selfie_h,
+            card_result, selfie_result,
+            pipeline_state="MATCHED",
+            blocked_before_matching=False,
+            matching_executed=True,
+            similarity_score=sim_score,
+            effective_threshold=effective_threshold,
+        )
+
         return FaceVerificationResponse(
             success=True,
             match=is_match,
@@ -531,10 +649,56 @@ class FaceVerifierService:
             threshold=effective_threshold,
             card_face=card_result,
             selfie_face=selfie_result,
+            pipeline_state="MATCHED",
             warnings=warnings,
             processing_time_ms=elapsed_ms,
             disclaimer=settings.FACE_DISCLAIMER,
+            diagnostics=diagnostics,
         )
+
+    def _build_diagnostics(
+        self,
+        card_w: int,
+        card_h: int,
+        selfie_w: int,
+        selfie_h: int,
+        card_result: FaceDetectionResult,
+        selfie_result: FaceDetectionResult,
+        pipeline_state: str,
+        blocked_before_matching: bool,
+        matching_executed: bool,
+        similarity_score: Optional[float] = None,
+        effective_threshold: Optional[float] = None,
+    ) -> dict:
+        return {
+            "card": {
+                "image_size": [card_w, card_h],
+                "detected": card_result.detected,
+                "bbox": [card_result.box.x, card_result.box.y, card_result.box.width, card_result.box.height] if card_result.box else None,
+                "crop_size": [card_result.quality.width, card_result.quality.height] if card_result.quality else None,
+                "blur_score": card_result.quality.blur_score if card_result.quality else None,
+                "brightness": card_result.quality.brightness if card_result.quality else None,
+                "is_valid": card_result.quality.is_valid if card_result.quality else False,
+                "warnings": card_result.quality.warnings if card_result.quality else [],
+                "error_code": card_result.error_code,
+            },
+            "selfie": {
+                "image_size": [selfie_w, selfie_h],
+                "detected": selfie_result.detected,
+                "bbox": [selfie_result.box.x, selfie_result.box.y, selfie_result.box.width, selfie_result.box.height] if selfie_result.box else None,
+                "crop_size": [selfie_result.quality.width, selfie_result.quality.height] if selfie_result.quality else None,
+                "blur_score": selfie_result.quality.blur_score if selfie_result.quality else None,
+                "brightness": selfie_result.quality.brightness if selfie_result.quality else None,
+                "is_valid": selfie_result.quality.is_valid if selfie_result.quality else False,
+                "warnings": selfie_result.quality.warnings if selfie_result.quality else [],
+                "error_code": selfie_result.error_code,
+            },
+            "pipeline_state": pipeline_state,
+            "blocked_before_matching": blocked_before_matching,
+            "matching_executed": matching_executed,
+            "similarity_score": similarity_score,
+            "threshold": effective_threshold,
+        }
 
     def _build_error_response(
         self,
@@ -543,6 +707,7 @@ class FaceVerifierService:
         threshold: float,
         card_result: Optional[FaceDetectionResult] = None,
         selfie_result: Optional[FaceDetectionResult] = None,
+        pipeline_state: str = "ERROR",
     ) -> FaceVerificationResponse:
         elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
         dummy_card = card_result or FaceDetectionResult(
@@ -559,9 +724,16 @@ class FaceVerifierService:
             threshold=threshold,
             card_face=dummy_card,
             selfie_face=dummy_selfie,
+            pipeline_state=pipeline_state,
             warnings=[error_msg],
             processing_time_ms=elapsed_ms,
             disclaimer=settings.FACE_DISCLAIMER,
+            diagnostics={
+                "pipeline_state": pipeline_state,
+                "blocked_before_matching": True,
+                "matching_executed": False,
+                "error": error_msg,
+            },
         )
 
 

@@ -49,9 +49,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const viewOcr = document.getElementById("viewOcr");
     const viewFace = document.getElementById("viewFace");
     const useOcrCardBtn = document.getElementById("useOcrCardBtn");
+    const proceedToFaceBtn = document.getElementById("proceedToFaceBtn");
+    const ocrProceedBanner = document.getElementById("ocrProceedBanner");
+    const faceCardSourceBadge = document.getElementById("faceCardSourceBadge");
 
     modeBtnOcr.addEventListener("click", () => switchMode("ocr"));
     modeBtnFace.addEventListener("click", () => switchMode("face"));
+
+    if (proceedToFaceBtn) {
+        proceedToFaceBtn.addEventListener("click", () => {
+            switchMode("face");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+    }
 
     function switchMode(mode) {
         if (mode === "ocr") {
@@ -65,9 +75,9 @@ document.addEventListener("DOMContentLoaded", () => {
             viewOcr.style.display = "none";
             viewFace.style.display = "block";
 
-            // If an OCR card is already uploaded, offer 1-click import
+            // If an OCR card is already uploaded, automatically carry it over to Face Card slot!
             if (currentOcrFile && !currentFaceCardFile) {
-                useOcrCardBtn.style.display = "inline-block";
+                handleFaceCardSelect(currentOcrFile);
             }
         }
     }
@@ -175,8 +185,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const sizeKB = (file.size / 1024).toFixed(1);
             imageMeta.textContent = `${file.name} (${sizeKB} KB)`;
 
-            // Also show button in Face tab to reuse this card
-            useOcrCardBtn.style.display = "inline-block";
+            // Pre-sync into Face Card slot if Face Card is not yet set
+            if (!currentFaceCardFile) {
+                handleFaceCardSelect(file);
+            }
         };
         reader.readAsDataURL(file);
     }
@@ -191,6 +203,9 @@ document.addEventListener("DOMContentLoaded", () => {
         resetBtn.style.display = "none";
         submitBtn.disabled = true;
         statsBadge.style.display = "none";
+        if (ocrProceedBanner) {
+            ocrProceedBanner.style.display = "none";
+        }
         hideOcrAlerts();
         resetOcrResults();
     });
@@ -366,6 +381,11 @@ document.addEventListener("DOMContentLoaded", () => {
             tabStructured.style.display = "none";
             tabRaw.style.display = "block";
         }
+
+        // Show call-to-action banner to proceed to face matching
+        if (ocrProceedBanner && currentOcrFile) {
+            ocrProceedBanner.style.display = "flex";
+        }
     }
 
     copyRawBtn.addEventListener("click", () => {
@@ -469,6 +489,9 @@ document.addEventListener("DOMContentLoaded", () => {
             faceCardPreviewContainer.style.display = "block";
             const sizeKB = (file.size / 1024).toFixed(1);
             faceCardMeta.textContent = `${file.name} (${sizeKB} KB)`;
+            if (faceCardSourceBadge) {
+                faceCardSourceBadge.style.display = (currentOcrFile && file === currentOcrFile) ? "inline-block" : "none";
+            }
             updateFaceSubmitBtnState();
         };
         reader.readAsDataURL(file);
@@ -572,7 +595,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function updateFaceSubmitBtnState() {
         const canSubmit = currentFaceCardFile !== null && currentSelfieFile !== null;
-        submitFaceBtn.disabled = !canSubmit;
+        if (canSubmit) {
+            submitFaceBtn.classList.add("btn-ready");
+        } else {
+            submitFaceBtn.classList.remove("btn-ready");
+        }
         resetFaceBtn.style.display = (currentFaceCardFile || currentSelfieFile) ? "inline-block" : "none";
     }
 
@@ -587,6 +614,9 @@ document.addEventListener("DOMContentLoaded", () => {
         selfiePrompt.style.display = "block";
         faceCardPreviewContainer.style.display = "none";
         selfiePreviewContainer.style.display = "none";
+        if (faceCardSourceBadge) {
+            faceCardSourceBadge.style.display = "none";
+        }
         stopWebcam();
         hideFaceAlerts();
         resetFaceResults();
@@ -611,12 +641,34 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // 4.4. Face Verification Request Execution
     submitFaceBtn.addEventListener("click", async () => {
-        if (!currentFaceCardFile || !currentSelfieFile) {
-            showFaceError("Vui lòng cung cấp cả ảnh mặt trước CCCD và ảnh selfie để thực hiện so khớp.");
+        hideFaceAlerts();
+
+        // If card image was not explicitly selected yet but exists in OCR tab, auto-load it
+        if (!currentFaceCardFile && currentOcrFile) {
+            handleFaceCardSelect(currentOcrFile);
+        }
+
+        if (!currentFaceCardFile && !currentSelfieFile) {
+            showFaceError("Vui lòng tải ảnh CCCD ở mục A và chụp ảnh hoặc tải ảnh selfie ở mục B để tiến hành so khớp.");
             return;
         }
 
-        hideFaceAlerts();
+        if (!currentFaceCardFile) {
+            showFaceError("Vui lòng tải ảnh mặt trước thẻ CCCD chứa chân dung in ở mục A.");
+            return;
+        }
+
+        if (!currentSelfieFile) {
+            showFaceError("Vui lòng chụp ảnh selfie bằng Webcam hoặc tải tệp ảnh chân dung ở mục B để so khớp với thẻ CCCD.");
+            selfieDropzone.classList.add("input-attention");
+            openWebcamBtn.classList.add("btn-attention");
+            setTimeout(() => {
+                selfieDropzone.classList.remove("input-attention");
+                openWebcamBtn.classList.remove("btn-attention");
+            }, 2500);
+            return;
+        }
+
         setFaceLoading(true);
 
         const formData = new FormData();
@@ -689,7 +741,7 @@ document.addEventListener("DOMContentLoaded", () => {
         resLatency.textContent = `${data.processing_time_ms} ms`;
 
         // Quality Analysis Table
-        populateQualityTable(data.card_face, data.selfie_face);
+        populateQualityTable(data.card_face, data.selfie_face, data);
 
         // Warnings list
         if (data.warnings && data.warnings.length > 0) {
@@ -701,7 +753,14 @@ document.addEventListener("DOMContentLoaded", () => {
         faceDisclaimerBox.textContent = data.disclaimer || "Kết quả so khớp mang tính chất thử nghiệm thuật toán đối sánh sinh trắc học.";
     }
 
-    function populateQualityTable(card, selfie) {
+    function populateQualityTable(card, selfie, data) {
+        // Diagnostic row elements
+        const qCardOrigSize = document.getElementById("qCardOrigSize");
+        const qSelfieOrigSize = document.getElementById("qSelfieOrigSize");
+        const qCardBBox = document.getElementById("qCardBBox");
+        const qSelfieBBox = document.getElementById("qSelfieBBox");
+        const qPipelineState = document.getElementById("qPipelineState");
+
         // Card face
         const qCardDetected = document.getElementById("qCardDetected");
         const qCardSize = document.getElementById("qCardSize");
@@ -712,17 +771,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (card && card.box) {
             qCardDetected.innerHTML = `<span class="badge-status badge-VALID">Đã phát hiện (${Math.round(card.box.confidence * 100)}%)</span>`;
+            if (qCardOrigSize) {
+                qCardOrigSize.textContent = (card.image_width && card.image_height) ? `${card.image_width} x ${card.image_height} px` : "—";
+            }
+            if (qCardBBox) {
+                qCardBBox.textContent = `[${card.box.x}, ${card.box.y}, ${card.box.width}, ${card.box.height}]`;
+            }
             if (card.quality) {
                 qCardSize.textContent = `${card.quality.width} x ${card.quality.height} px`;
                 qCardBrightness.textContent = `${card.quality.brightness} / 255`;
                 qCardBlur.textContent = `${card.quality.blur_score} (Laplacian)`;
                 qCardAspect.textContent = `${card.quality.aspect_ratio}`;
-                qCardStatus.innerHTML = card.quality.is_valid
-                    ? `<span class="badge-status badge-VALID">Đạt tiêu chuẩn</span>`
-                    : `<span class="badge-status badge-INVALID">Không đạt</span>`;
+                if (card.quality.is_valid) {
+                    if (card.quality.warnings && card.quality.warnings.length > 0) {
+                        qCardStatus.innerHTML = `<span class="badge-status badge-WARNING">Cảnh báo chất lượng</span>`;
+                    } else {
+                        qCardStatus.innerHTML = `<span class="badge-status badge-VALID">Đạt tiêu chuẩn</span>`;
+                    }
+                } else {
+                    qCardStatus.innerHTML = `<span class="badge-status badge-INVALID">Không đạt (Từ chối)</span>`;
+                }
             }
         } else {
             qCardDetected.innerHTML = `<span class="badge-status badge-MISSING">${card && card.error_code ? card.error_code : 'Chưa thấy mặt'}</span>`;
+            if (qCardOrigSize) qCardOrigSize.textContent = (card && card.image_width) ? `${card.image_width} x ${card.image_height} px` : "—";
+            if (qCardBBox) qCardBBox.textContent = "—";
             qCardSize.textContent = "—";
             qCardBrightness.textContent = "—";
             qCardBlur.textContent = "—";
@@ -740,22 +813,52 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (selfie && selfie.box) {
             qSelfieDetected.innerHTML = `<span class="badge-status badge-VALID">Đã phát hiện (${Math.round(selfie.box.confidence * 100)}%)</span>`;
+            if (qSelfieOrigSize) {
+                qSelfieOrigSize.textContent = (selfie.image_width && selfie.image_height) ? `${selfie.image_width} x ${selfie.image_height} px` : "—";
+            }
+            if (qSelfieBBox) {
+                qSelfieBBox.textContent = `[${selfie.box.x}, ${selfie.box.y}, ${selfie.box.width}, ${selfie.box.height}]`;
+            }
             if (selfie.quality) {
                 qSelfieSize.textContent = `${selfie.quality.width} x ${selfie.quality.height} px`;
                 qSelfieBrightness.textContent = `${selfie.quality.brightness} / 255`;
                 qSelfieBlur.textContent = `${selfie.quality.blur_score} (Laplacian)`;
                 qSelfieAspect.textContent = `${selfie.quality.aspect_ratio}`;
-                qSelfieStatus.innerHTML = selfie.quality.is_valid
-                    ? `<span class="badge-status badge-VALID">Đạt tiêu chuẩn</span>`
-                    : `<span class="badge-status badge-INVALID">Không đạt</span>`;
+                if (selfie.quality.is_valid) {
+                    if (selfie.quality.warnings && selfie.quality.warnings.length > 0) {
+                        qSelfieStatus.innerHTML = `<span class="badge-status badge-WARNING">Cảnh báo chất lượng</span>`;
+                    } else {
+                        qSelfieStatus.innerHTML = `<span class="badge-status badge-VALID">Đạt tiêu chuẩn</span>`;
+                    }
+                } else {
+                    qSelfieStatus.innerHTML = `<span class="badge-status badge-INVALID">Không đạt (Từ chối)</span>`;
+                }
             }
         } else {
             qSelfieDetected.innerHTML = `<span class="badge-status badge-MISSING">${selfie && selfie.error_code ? selfie.error_code : 'Chưa thấy mặt'}</span>`;
+            if (qSelfieOrigSize) qSelfieOrigSize.textContent = (selfie && selfie.image_width) ? `${selfie.image_width} x ${selfie.image_height} px` : "—";
+            if (qSelfieBBox) qSelfieBBox.textContent = "—";
             qSelfieSize.textContent = "—";
             qSelfieBrightness.textContent = "—";
             qSelfieBlur.textContent = "—";
             qSelfieAspect.textContent = "—";
             qSelfieStatus.textContent = "—";
+        }
+
+        // Pipeline execution state
+        if (qPipelineState && data) {
+            const state = data.pipeline_state || "MATCHED";
+            if (state === "MATCHED") {
+                qPipelineState.innerHTML = `<span class="badge-status badge-VALID">MATCHED — Đã thực hiện đối sánh sinh trắc học SFace</span>`;
+            } else if (state === "BLOCKED_QUALITY") {
+                qPipelineState.innerHTML = `<span class="badge-status badge-INVALID">BLOCKED_QUALITY — Bị chặn trước matching do lỗi chất lượng nghiêm trọng</span>`;
+            } else if (state === "BLOCKED_NO_FACE") {
+                qPipelineState.innerHTML = `<span class="badge-status badge-INVALID">BLOCKED_NO_FACE — Bị chặn do không phát hiện khuôn mặt</span>`;
+            } else if (state === "BLOCKED_MULTIPLE_FACES") {
+                qPipelineState.innerHTML = `<span class="badge-status badge-INVALID">BLOCKED_MULTIPLE_FACES — Bị chặn do có nhiều khuôn mặt</span>`;
+            } else {
+                qPipelineState.innerHTML = `<span class="badge-status badge-INVALID">${escapeHtml(state)}</span>`;
+            }
         }
     }
 

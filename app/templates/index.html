@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ app_name }} — Công cụ Thử nghiệm OCR & Xác minh Khuôn mặt CCCD</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css?v=1.2.0">
 </head>
 <body>
     <header class="app-header">
@@ -175,6 +175,20 @@
                         </div>
                         <div class="raw-detections-list" id="rawDetectionsList"></div>
                     </div>
+
+                    <!-- Next Step Call-to-Action Banner -->
+                    <div class="ocr-proceed-banner" id="ocrProceedBanner" style="display: none;">
+                        <div class="proceed-banner-content">
+                            <div class="proceed-title">Trích xuất thành công!</div>
+                            <div class="proceed-desc">Bạn có thể chuyển ngay sang bước Đối sánh sinh trắc học khuôn mặt CCCD với Selfie.</div>
+                        </div>
+                        <button type="button" class="btn btn-primary btn-proceed" id="proceedToFaceBtn">
+                            <span>Chuyển sang So khớp Khuôn mặt</span>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </button>
+                    </div>
                 </section>
             </div>
         </div>
@@ -192,7 +206,10 @@
                     <!-- Card Image Area for Face Matching -->
                     <div class="input-block">
                         <div class="input-block-header">
-                            <label class="block-label">A. Ảnh Mặt trước CCCD (chứa chân dung in)</label>
+                            <div class="block-label-group">
+                                <label class="block-label">A. Ảnh Mặt trước CCCD (chứa chân dung in)</label>
+                                <span class="badge-source" id="faceCardSourceBadge" style="display: none;">Đã nạp tự động từ tab OCR</span>
+                            </div>
                             <button type="button" id="useOcrCardBtn" class="btn-link" style="display: none;">Dùng ảnh từ tab OCR</button>
                         </div>
 
@@ -277,7 +294,7 @@
                     </div>
 
                     <!-- Submit Verification Button -->
-                    <button type="button" id="submitFaceBtn" class="btn btn-primary" disabled>
+                    <button type="button" id="submitFaceBtn" class="btn btn-primary">
                         <span class="btn-text-label">So khớp khuôn mặt 1:1</span>
                         <span class="btn-spinner" style="display: none;"></span>
                     </button>
@@ -355,7 +372,17 @@
                                             <td id="qSelfieDetected">—</td>
                                         </tr>
                                         <tr>
-                                            <td><strong>Kích thước vùng mặt</strong></td>
+                                            <td><strong>Độ phân giải ảnh gốc</strong></td>
+                                            <td id="qCardOrigSize">—</td>
+                                            <td id="qSelfieOrigSize">—</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Tọa độ Bounding Box</strong></td>
+                                            <td id="qCardBBox">—</td>
+                                            <td id="qSelfieBBox">—</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Kích thước vùng mặt (Crop)</strong></td>
                                             <td id="qCardSize">—</td>
                                             <td id="qSelfieSize">—</td>
                                         </tr>
@@ -379,6 +406,10 @@
                                             <td id="qCardStatus">—</td>
                                             <td id="qSelfieStatus">—</td>
                                         </tr>
+                                        <tr>
+                                            <td><strong>Trạng thái Pipeline</strong></td>
+                                            <td colspan="2" id="qPipelineState">—</td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -396,6 +427,6 @@
         <p>CampusHub-OCR Benchmark & Testing Bench — Bản quyền © 2026 Phạm Hữu Cảnh</p>
     </footer>
 
-    <script src="/static/js/app.js"></script>
+    <script src="/static/js/app.js?v=1.2.0"></script>
 </body>
 </html>

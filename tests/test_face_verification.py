@@ -416,3 +416,136 @@ def test_load_manifest_validation_errors():
 
     with pytest.raises(FileNotFoundError):
         evaluate_face.load_manifest_dataset("nonexistent_manifest_file.json")
+
+
+def test_cccd_portrait_moderate_blur_passes_quality_with_warning():
+    """CCCD portrait with Laplacian variance ~8.35 (similar to user case) is valid (is_valid=True) with advisory warning."""
+    img = np.full((353, 281, 3), 152, dtype=np.uint8)
+    cv2.circle(img, (100, 140), 15, (50, 50, 50), -1)
+    cv2.circle(img, (180, 140), 15, (50, 50, 50), -1)
+    cv2.ellipse(img, (140, 220), (40, 15), 0, 0, 180, (80, 60, 60), 3)
+    img_soft = cv2.GaussianBlur(img, (5, 5), 1.2)
+
+    gray = cv2.cvtColor(img_soft, cv2.COLOR_BGR2GRAY)
+    actual_blur = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    assert actual_blur < 15.0  # Would have failed under old threshold 15.0!
+
+    q = FaceQualityValidator.validate_quality(img_soft, (0, 0, 281, 353), source_type="card")
+    assert q.is_valid is True
+    assert any("độ sắc nét trung bình" in w for w in q.warnings)
+
+
+def test_cccd_moderate_blur_matching_proceeds_without_abort(client, mock_face):
+    """When CCCD has moderate blur (e.g. Laplacian ~8.35), matching is NOT aborted and returns genuine score."""
+    mock_face.engine.mock_faces_map[600 * 10000 + 400] = [{
+        "box": (100, 50, 281, 353, 0.99),
+        "landmarks": [(150, 150), (230, 150), (190, 220), (160, 280), (220, 280)],
+        "raw": None,
+    }]
+
+    card_arr = np.full((400, 600, 3), 152, dtype=np.uint8)
+    # Add facial features inside crop (100, 50, 281, 353) -> x in [100, 381], y in [50, 403]
+    cv2.circle(card_arr, (180, 160), 12, (50, 50, 50), -1)
+    cv2.circle(card_arr, (260, 160), 12, (50, 50, 50), -1)
+    cv2.ellipse(card_arr, (220, 260), (45, 18), 0, 0, 180, (80, 60, 60), 4)
+    card_arr_soft = cv2.GaussianBlur(card_arr, (5, 5), 1.2)
+    _, buf_card = cv2.imencode(".jpg", card_arr_soft)
+    card_bytes = buf_card.tobytes()
+
+    selfie_bytes = create_valid_image_bytes(width=600, height=400)
+
+    res = client.post(
+        "/api/v1/face/verify",
+        files={
+            "card_file": ("card.jpg", card_bytes, "image/jpeg"),
+            "selfie_file": ("selfie.jpg", selfie_bytes, "image/jpeg"),
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["success"] is True
+    assert data["match"] is True
+    assert data["pipeline_state"] == "MATCHED"
+    assert data["similarity_score"] > 0.0
+    assert any("độ sắc nét trung bình" in w for w in data["warnings"])
+
+
+def test_face_quality_severe_blur_aborts_matching(client, mock_face):
+    """When image is severely blurred (Laplacian < 3.0), matching is aborted with BLOCKED_QUALITY."""
+    mock_face.engine.mock_faces_map[600 * 10000 + 400] = [{
+        "box": (100, 50, 280, 280, 0.99),
+        "landmarks": [(150, 150), (230, 150), (190, 220), (160, 280), (220, 280)],
+        "raw": None,
+    }]
+
+    # Create flat image with Laplacian 0.0 < 3.0
+    flat_arr = np.full((400, 600, 3), 140, dtype=np.uint8)
+    _, buf_card = cv2.imencode(".jpg", flat_arr)
+    card_bytes = buf_card.tobytes()
+
+    selfie_bytes = create_valid_image_bytes(width=600, height=400)
+
+    res = client.post(
+        "/api/v1/face/verify",
+        files={
+            "card_file": ("card.jpg", card_bytes, "image/jpeg"),
+            "selfie_file": ("selfie.jpg", selfie_bytes, "image/jpeg"),
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["success"] is False
+    assert data["match"] is False
+    assert data["pipeline_state"] == "BLOCKED_QUALITY"
+    assert data["similarity_score"] == 0.0
+
+
+def test_diagnostics_payload():
+    """Verify that verify_faces includes complete diagnostics payload."""
+    verifier = FaceVerifierService(engine=MockFaceEngine())
+    card_img = np.random.randint(60, 200, (400, 600, 3), dtype=np.uint8)
+    selfie_img = np.random.randint(60, 200, (500, 500, 3), dtype=np.uint8)
+
+    resp = verifier.verify_faces(card_img, selfie_img)
+    assert resp.diagnostics is not None
+    assert resp.diagnostics["pipeline_state"] == "MATCHED"
+    assert resp.diagnostics["matching_executed"] is True
+    assert resp.diagnostics["card"]["image_size"] == [600, 400]
+    assert resp.diagnostics["selfie"]["image_size"] == [500, 500]
+
+
+def test_debug_crop_saving_toggle(tmp_path):
+    """Verify save_debug_crop respects FACE_DEBUG_SAVE_CROPS flag."""
+    import os
+    from app.services.face_verifier import save_debug_crop
+    test_crop = np.zeros((100, 100, 3), dtype=np.uint8)
+
+    # When False, does not save
+    settings.FACE_DEBUG_SAVE_CROPS = False
+    result = save_debug_crop(test_crop, "test")
+    assert result is None
+
+    # When True, saves to debug dir
+    settings.FACE_DEBUG_SAVE_CROPS = True
+    settings.FACE_DEBUG_DIR = str(tmp_path)
+    try:
+        saved_path = save_debug_crop(test_crop, "test_crop")
+        assert saved_path is not None
+        assert os.path.exists(saved_path)
+    finally:
+        settings.FACE_DEBUG_SAVE_CROPS = False
+
+
+def test_face_benchmark_distribution_reporting():
+    """Verify that evaluate_face reports matching execution counts and distributions."""
+    import evaluate_face
+    verifier = FaceVerifierService(engine=MockFaceEngine())
+    pairs = evaluate_face.create_synthetic_smoke_test_pairs(count=6)
+    summary = evaluate_face.run_benchmark(pairs, verifier, is_synthetic=True, thresholds=[0.363])
+
+    assert "matching_executed" in summary
+    assert summary["matching_executed"] == 6
+    assert "similarity_distribution" in summary
+    assert summary["similarity_distribution"]["genuine"]["count"] == 3
+    assert summary["similarity_distribution"]["impostor"]["count"] == 3
+
