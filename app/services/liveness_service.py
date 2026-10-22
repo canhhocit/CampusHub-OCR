@@ -15,8 +15,10 @@ from app.schemas.liveness import (
     LivenessSessionCreateResponse,
     LivenessStepVerifyResponse,
     LivenessSessionStatusResponse,
+    LivenessHealthResponse,
     AntiSpoofingOutcome,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -424,6 +426,64 @@ class LivenessService:
                 history=session.history,
                 disclaimer=settings.LIVENESS_DISCLAIMER,
             )
+
+    def get_health_status(self) -> LivenessHealthResponse:
+        """Kiểm tra trạng thái sẵn sàng của hệ thống Liveness (Active Challenges + Passive PAD)."""
+        yunet_path = os.path.join(settings.FACE_MODEL_DIR, settings.FACE_DETECTOR_MODEL)
+        yunet_exists = os.path.exists(yunet_path)
+
+        pad_detector = self._get_anti_spoofing_detector()
+        pad_ready = bool(getattr(pad_detector, "is_available", False))
+        pad_details = pad_detector.get_model_status() if hasattr(pad_detector, "get_model_status") else {}
+        pad_init_error = getattr(pad_detector, "init_error", None)
+
+        models_info = {
+            "yunet": {
+                "name": "YuNet (Face Detection & 5-Landmarks)",
+                "path": yunet_path,
+                "exists": yunet_exists,
+                "license": "Apache-2.0",
+            },
+            "anti_spoofing": pad_details,
+        }
+
+        errors = []
+        if not yunet_exists:
+            errors.append(f"Tệp mô hình YuNet không tồn tại tại: {yunet_path}")
+        if settings.ANTI_SPOOFING_ENABLED and not pad_ready:
+            errors.append(
+                f"Mô hình chống giả mạo thụ động MiniFASNet chưa sẵn sàng: {pad_init_error or 'Chưa nạp được weights'}"
+            )
+
+        if not yunet_exists or (settings.ANTI_SPOOFING_FAIL_CLOSED and not pad_ready):
+            overall_status = "unavailable"
+        elif not pad_ready:
+            overall_status = "degraded"
+        else:
+            overall_status = "ok"
+
+        return LivenessHealthResponse(
+            status=overall_status,
+            version=settings.APP_VERSION,
+            active_liveness_ready=yunet_exists,
+            passive_anti_spoofing_ready=pad_ready,
+            anti_spoofing_enabled=settings.ANTI_SPOOFING_ENABLED,
+            fail_closed=settings.ANTI_SPOOFING_FAIL_CLOSED,
+            thresholds={
+                "yaw_center_min": settings.LIVENESS_YAW_CENTER_MIN,
+                "yaw_center_max": settings.LIVENESS_YAW_CENTER_MAX,
+                "yaw_turn_left_min": settings.LIVENESS_YAW_TURN_LEFT_MIN,
+                "yaw_turn_right_max": settings.LIVENESS_YAW_TURN_RIGHT_MAX,
+                "min_motion_variance": settings.LIVENESS_MIN_MOTION_VARIANCE,
+                "min_face_height_ratio": settings.LIVENESS_FACE_MIN_HEIGHT_RATIO,
+                "max_face_height_ratio": settings.LIVENESS_FACE_MAX_HEIGHT_RATIO,
+                "pad_threshold_live": settings.ANTI_SPOOFING_THRESHOLD_LIVE,
+                "pad_threshold_spoof": settings.ANTI_SPOOFING_THRESHOLD_SPOOF,
+                "pad_threshold_spoof_sum": settings.ANTI_SPOOFING_THRESHOLD_SPOOF_SUM,
+            },
+            models=models_info,
+            error_message="; ".join(errors) if errors else None,
+        )
 
     @staticmethod
     def _compute_pose_metrics(landmarks: List[Tuple[int, int]]) -> Tuple[float, float]:

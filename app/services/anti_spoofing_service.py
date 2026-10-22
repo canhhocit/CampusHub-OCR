@@ -122,6 +122,26 @@ class MiniFASNetAntiSpoofingDetector(BaseAntiSpoofingDetector):
     def is_available(self) -> bool:
         return self._is_available
 
+    @property
+    def init_error(self) -> Optional[str]:
+        return self._init_error
+
+    def get_model_status(self) -> Dict[str, Any]:
+        return {
+            "model_v2": {
+                "path": self.model_path_v2,
+                "exists": os.path.exists(self.model_path_v2),
+                "loaded": self._net_v2 is not None,
+            },
+            "model_v1se": {
+                "path": self.model_path_v1se,
+                "exists": os.path.exists(self.model_path_v1se),
+                "loaded": self._net_v1se is not None,
+            },
+            "is_available": self._is_available,
+            "init_error": self._init_error,
+        }
+
     @staticmethod
     def _get_new_box(
         src_w: int, src_h: int, bbox: Tuple[int, int, int, int], scale: float
@@ -351,6 +371,21 @@ class MockAntiSpoofingDetector(BaseAntiSpoofingDetector):
                 confidence=0.0,
                 error_message="Mocked technical inference failure",
             )
+
+    @property
+    def is_available(self) -> bool:
+        return True
+
+    @property
+    def init_error(self) -> Optional[str]:
+        return None
+
+    def get_model_status(self) -> Dict[str, Any]:
+        return {
+            "mock": True,
+            "is_available": True,
+            "init_error": None,
+        }
 
 
 # Global singleton provider

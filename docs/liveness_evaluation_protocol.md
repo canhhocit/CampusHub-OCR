@@ -1,71 +1,128 @@
-# Giao thức Đánh giá Thực nghiệm Kiểm tra Thực thể sống V1 (Liveness Detection V1 Protocol)
+# Giao thức Đánh giá Thực nghiệm & Hướng dẫn Vận hành Kiểm tra Thực thể sống (Two-Tier Liveness & PAD Protocol)
 
-> **Cảnh báo Pháp lý & Bản quyền Kỹ thuật:**  
-> Hệ thống Liveness Detection V1 trong CampusHub-OCR được xây dựng dưới dạng **Nguyên mẫu nghiên cứu (Research Prototype)** dựa trên cơ chế **Thách thức Cử động Chủ động (Active Challenge)** kết hợp ước lượng tư thế đầu (Head Pose Yaw/Pitch) từ 5 điểm mốc đặc trưng khuôn mặt (YuNet 5-Landmarks).  
-> **Hệ thống KHÔNG triển khai mô hình Passive Anti-Spoofing (chống giả mạo thụ động dựa trên texture/chiều sâu/hồng ngoại). Do đó, hệ thống chỉ đánh giá mức độ tuân thủ cử động theo thử thách ngẫu nhiên, không thể thiết lập khả năng chống giả mạo toàn diện đối với các kỹ thuật tấn công tinh vi (Deepfake hoặc video quay lén có tương tác).**
-
----
-
-## 1. Mục tiêu và Phạm vi Đánh giá
-
-1. Đo lường tỷ lệ chấp nhận thực thể sống thật (**True Accept Rate - TAR / Genuine Acceptance**).
-2. Đo lường tỷ lệ từ chối các cuộc tấn công trình diện phổ biến (**Presentation Attack Rejection Rate - PARR**):
-   - Ảnh in màu trên giấy A4/ảnh thẻ.
-   - Ảnh tĩnh hiển thị trên màn hình điện thoại / máy tính bảng / màn hình máy tính.
-   - Video phát lại cử động quay sẵn (Replay Attack).
-3. Đánh giá độ ổn định và dung sai khi thay đổi điều kiện ánh sáng, khoảng cách và chất lượng webcam.
+> **Cảnh báo Pháp lý & Phạm vi Kỹ thuật:**  
+> Hệ thống Liveness & Anti-Spoofing trong CampusHub-OCR được xây dựng theo kiến trúc phòng vệ hai lớp (**Two-Tier Defense**):
+> 1. **Lớp Chủ động (Active Pose Challenges):** Thách thức cử động đầu ngẫu nhiên theo phiên (YuNet 5-Landmarks, kiểm tra góc quay Yaw $\Delta yaw \ge 12^\circ$, vận tốc góc và face-framing).
+> 2. **Lớp Thụ động (Passive PAD - Presentation Attack Detection):** Kiểm tra cấu trúc quang phổ và vân da/vân màn hình bằng cụm mô hình **MiniFASNet (V2 & V1SE)** đa tỷ lệ chạy trực tiếp trên CPU qua OpenCV DNN.
+>
+> **Lưu ý Giới hạn Biên bảo mật:** Hệ thống chạy trên ảnh 2D RGB đơn kênh camera tiêu chuẩn, **không** có camera hồng ngoại (IR) hoặc cảm biến độ sâu (ToF/Structured Light). Do đó, PAD không thể ngăn chặn 100% các cuộc tấn công cấp độ cao như Virtual Camera injection qua driver phần mềm (OBS Virtual Cam) hoặc mặt nạ silicon 3D cao cấp.
 
 ---
 
-## 2. Quy tắc Đạo đức và Quyền riêng tư (Privacy & Consent)
+## 1. Mục tiêu và Phạm vi Đánh giá (ISO/IEC 30107-3)
 
-- **Sự đồng thuận (Explicit Consent):** Tất cả người tham gia thử nghiệm đều ký/xác nhận đồng thuận tự nguyện tham gia thử nghiệm công nghệ sinh trắc học nội bộ.
-- **Không lưu trữ dữ liệu khuôn mặt (Zero Persistence):** Quá trình đánh giá được thực hiện trực tiếp trên RAM, không ghi hình, không lưu ảnh chụp hay trích xuất vector khuôn mặt vào cơ sở dữ liệu hoặc ổ đĩa cứng.
+Theo tiêu chuẩn quốc tế ISO/IEC 30107-3 về đánh giá tính năng phát hiện tấn công trình diện (Presentation Attack Detection):
+1. **Bona Fide Presentation Classification Error Rate (BPCER):** Tỷ lệ từ chối sai người thật hợp lệ (False Rejection).
+2. **Attack Presentation Classification Error Rate (APCER):** Tỷ lệ chấp nhận sai cuộc tấn công giả mạo (False Acceptance / Attack Pass).
+3. **Độ trễ suy luận (Inference Latency):** Thời gian tính toán trên CPU cho mỗi khung hình (Mean & 95th percentile).
+
+---
+
+## 2. Quy tắc Đạo đức và Quyền riêng tư (Privacy & Zero Persistence)
+
+- **Sự đồng thuận (Explicit Consent):** Tất cả người tham gia thử nghiệm đều xác nhận đồng thuận tự nguyện tham gia đánh giá nội bộ.
+- **Không lưu trữ dữ liệu khuôn mặt (Zero Persistence):** Khung hình từ webcam được nạp trực tiếp vào bộ nhớ RAM (`numpy.ndarray`), suy luận qua OpenCV DNN và giải phóng ngay sau khi phản hồi API kết thúc.
+- **Không log dữ liệu nhạy cảm:** Tuyệt đối không log chuỗi base64 ảnh, vector embedding sinh trắc học hoặc thông tin định danh cá nhân vào log tệp hay console.
 
 ---
 
 ## 3. Ma trận Kịch bản Thử nghiệm (Test Matrix)
 
-| Mã kịch bản | Loại đối tượng / Tấn công | Mô tả chi tiết hành vi | Kết quả kỳ vọng |
+| Mã kịch bản | Loại đối tượng / Tấn công | Cơ chế phát hiện chính | Kết quả kỳ vọng |
 |---|---|---|---|
-| **PA-01** | **Người thật (Genuine Live)** | Người thật nhìn thẳng, làm theo đúng thứ tự thử thách (ví dụ: quay trái -> quay phải). Đủ ánh sáng (>50 lux), cự ly 40–70cm. | **CHẤP NHẬN (PASSED)** |
-| **PA-02** | **Ảnh in màu (Printed Photo)** | Cầm ảnh in màu chân dung khổ A4 hoặc ảnh thẻ trước camera, giữ cố định hoặc lắc lư nhẹ theo hướng thử thách. | **TỪ CHỐI (REJECTED)**: Bị chặn bởi `STATIC_IMAGE_DETECTED` hoặc không đủ biên độ $R_{yaw}$. |
-| **PA-03** | **Ảnh màn hình (Screen Photo)** | Hiển thị ảnh chân dung tĩnh trên màn hình iPhone/Android/iPad trước camera. | **TỪ CHỐI (REJECTED)**: Bị chặn bởi `STATIC_IMAGE_DETECTED` do $\Delta R_{yaw} < 0.04$. |
-| **PA-04** | **Video phát lại (Video Replay - Cố định)** | Phát video quay sẵn người đang nhìn thẳng hoặc cười, đưa trước webcam. | **TỪ CHỐI (REJECTED)**: `CHALLENGE_MISMATCH` hoặc `STATIC_IMAGE_DETECTED` do không khớp hành động quay đầu ngẫu nhiên của phiên. |
-| **PA-05** | **Video phát lại (Video Replay - Cử động lệch)** | Phát video quay sẵn một hành động quay đầu ngẫu nhiên nhưng ngược chiều với phiên yêu cầu (ví dụ: video quay phải trong khi phiên yêu cầu quay trái). | **TỪ CHỐI (REJECTED)**: Bị chặn bởi `CHALLENGE_MISMATCH` ("Bạn đã quay đầu sang bên PHẢI trong khi yêu cầu là quay sang bên TRÁI"). |
-| **PA-06** | **Nhiều khuôn mặt (Multi-face)** | Hai người cùng xuất hiện trong khung hình webcam khi đang thực hiện thử thách. | **TỪ CHỐI (REJECTED)**: Bị chặn bởi `MULTIPLE_FACES_DETECTED`. |
-| **PA-07** | **Che mặt / Thiếu mặt** | Che nửa mặt hoặc di chuyển ra ngoài khung hình trong quá trình quay chuỗi khung hình. | **TỪ CHỐI (REJECTED)**: Bị chặn bởi `NO_FACE_DETECTED`. |
-| **PA-08** | **Cắt ghép ảnh / Nhảy cóc (Discontinuity)** | Đổi nhanh từ ảnh nhìn thẳng sang ảnh quay trái bằng cách rút giấy che hoặc đổi tab màn hình đột ngột. | **TỪ CHỐI (REJECTED)**: Bị chặn bởi `DISCONTINUOUS_MOTION`. |
+| **PA-01** | **Người thật (Genuine Live)** | Vượt qua cả Active Yaw turn và MiniFASNet ($P_{real} \ge 0.80$) | **PASSED** (Mã lý do: `STEP_PASSED`, `ALL_CHALLENGES_PASSED`) |
+| **PA-02** | **Ảnh in màu (Printed Photo)** | MiniFASNet phát hiện vân mực giấy/biên ảnh ($P_{paper} \ge 0.60$) hoặc thiếu cử động ($\Delta yaw < 0.04$) | **REJECTED** (`SPOOF_DETECTED` hoặc `STATIC_IMAGE_DETECTED`) |
+| **PA-03** | **Ảnh tĩnh màn hình (Screen Photo)** | MiniFASNet phát hiện phản chiếu màn hình ($P_{screen} \ge 0.60$) kết hợp $\Delta yaw < 0.04$ | **REJECTED** (`SPOOF_DETECTED` hoặc `STATIC_IMAGE_DETECTED`) |
+| **PA-04** | **Video Replay (Tua lại video quay đầu)** | MiniFASNet phát hiện vân lưới pixel/moiré và lóa sáng màn hình thiết bị phát lại | **REJECTED** (`SPOOF_DETECTED` - chặn ngay cả khi góc quay đầu trong video thỏa mãn active challenge) |
+| **PA-05** | **Video Replay cử động lệch chiều** | Active Challenge kiểm tra hướng quay đầu (ngược chiều phiên yêu cầu) | **REJECTED** (`CHALLENGE_MISMATCH`) |
+| **PA-06** | **Nhiều khuôn mặt (Multi-face)** | YuNet phát hiện số khuôn mặt $> 1$ trong khung hình | **REJECTED** (`MULTIPLE_FACES_DETECTED`) |
+| **PA-07** | **Che mặt / Khuôn mặt ngoài oval** | FaceFramingValidator phát hiện khuôn mặt lệch biên, cắt mép hoặc quá nhỏ | **REJECTED** (`FACE_PARTIALLY_VISIBLE` hoặc `FACE_TOO_FAR`) |
+| **PA-08** | **Môi trường thiếu sáng nghiêm trọng** | Điểm số PAD rơi vào khoảng không chắc chắn ($0.40 < P_{real} < 0.80$) | **REJECTED** (`UNCERTAIN_LIVENESS` - Yêu cầu căn chỉnh ánh sáng) |
 
 ---
 
-## 4. Bảng Kết quả Thực nghiệm Điển hình (Empirical Benchmark Results)
+## 4. Kết quả Đo kiểm Thực nghiệm
 
-Dưới đây là kết quả đo kiểm trên bộ dữ liệu thử nghiệm 100 lượt tương tác:
+### 4.1. Kết quả Benchmark Thực tế (Đã chạy trên máy thử nghiệm qua `evaluate_liveness_pad.py`)
+Kết quả đo kiểm trực tiếp trên bộ mẫu kiểm thử của dự án:
+- **Tổng số mẫu trình diện (N):** 3 mẫu đại diện tiêu chuẩn
+- **Mẫu người thật hợp lệ (Live):** 1 mẫu ($P_{real} = 1.000, P_{screen} = 0.000$)
+- **Mẫu tấn công màn hình (Screen Replay):** 1 mẫu ($P_{real} = 0.291, P_{screen} = 0.567 \rightarrow$ Bị chặn)
+- **Mẫu ảnh nhiễu/biên mờ:** 1 mẫu ($P_{real} = 0.482 \rightarrow$ Phân loại `UNCERTAIN` $\rightarrow$ Bị chặn)
+- **APCER (Tấn công lọt lưới):** **0.0%**
+- **BPCER (Từ chối sai người thật):** **0.0%**
+- **Độ trễ suy luận CPU trung bình:** **10.12 ms / frame** (95th percentile: **16.74 ms**)
 
-| Nhóm thử nghiệm | Số mẫu thử (N) | Số mẫu vượt qua | Số mẫu bị chặn | Tỷ lệ thành công (%) | Ghi chú & Nguyên nhân chặn |
-|---|---|---|---|---|---|
-| **Người thật (Live Genuine)** | 50 | 48 | 2 | **96.0% (TAR)** | 2 ca không đạt do người dùng quay đầu quá nhanh (<200ms) trước khi camera kịp bắt khung hình; sau khi thử lại lượt 2 đều đạt. |
-| **Ảnh in giấy (Paper Spoof)** | 20 | 0 | 20 | **100% Chặn (BPCER=0%)** | 100% bị chặn với mã `STATIC_IMAGE_DETECTED`. |
-| **Ảnh màn hình (Screen Spoof)** | 20 | 0 | 20 | **100% Chặn** | 100% bị chặn với mã `STATIC_IMAGE_DETECTED`. |
-| **Video Replay không khớp cử động** | 10 | 0 | 10 | **100% Chặn** | 10 ca đều bị chặn do không khớp chuỗi ngẫu nhiên (chặn bởi `CHALLENGE_MISMATCH`). |
-
----
-
-## 5. Giới hạn Kỹ thuật & Các Cuộc tấn công Còn Điểm yếu
-
-1. **Lỗ hổng Replay Attack Tương tác (Interactive Video Replay):**
-   - Nếu kẻ tấn công sở hữu sẵn một kho clip cử động của nạn nhân (clip quay trái, clip quay phải, clip nhìn thẳng) và lập trình phát đúng clip theo thử thách của backend hiển thị trên màn hình, giải pháp Active Challenge đơn thuần **sẽ bị vượt qua**.
-2. **Thiếu cảm biến độ sâu / Passive Texture Analysis:**
-   - Hệ thống thuần 2D RGB, không thể phân biệt viền phản xạ ánh sáng (moire pattern/screen glare) hoặc vân giấy nếu không có thêm mô hình CNN Passive Liveness (như MiniFASNet hoặc Silent-Face-Anti-Spoofing).
+> **Ghi chú tính quy chuẩn:** Kết quả 0.0% trên phản ánh khả năng xử lý chính xác trên tập mẫu kiểm thử nội bộ. Đối với môi trường sản phẩm thực tế, cần tiếp tục thu thập tập mẫu đa dạng chủng loại màn hình (OLED, Retina, IPS) và các điều kiện ánh sáng từ 20 đến 1000 lux.
 
 ---
 
-## 6. Lộ trình Nâng cấp Đề xuất (Next Steps for Production Liveness)
+## 5. Giới hạn Kỹ thuật & Các Cuộc tấn công Cần Lưu ý
 
-1. **Tích hợp mô hình Passive Anti-Spoofing (ví dụ: MiniFASNetV2 ONNX):**
-   - Nạp thêm mô hình kiểm tra vân màn hình và vật liệu da người thật (Texture & Frequency domain inspection) chạy song song với YuNet landmark tracking.
-2. **Đo độ chớp mắt (Blink Detection qua EAR):**
-   - Nâng cấp mô hình mốc khuôn mặt từ 5 landmarks lên 68 landmarks hoặc MediaPipe Face Mesh (468 landmarks) để tính tỷ số mở mắt (Eye Aspect Ratio - EAR), kết hợp thử thách "Chớp mắt 2 lần".
-3. **Mã hóa và Ký số Khung hình phía Client (WebRTC / Signed Frames):**
-   - Ký số timestamp và frame hash từ Web Crypto API để chống lại việc can thiệp inject video qua Virtual Webcam (như OBS Virtual Camera).
+1. **Virtual Camera / Software Frame Injection:**
+   - Nếu kẻ tấn công can thiệp ở tầng hệ điều hành hoặc trình duyệt (sử dụng OBS Virtual Camera hoặc giả lập MediaStream API) để bơm trực tiếp khung hình đã xử lý vào luồng video, camera vật lý bị bỏ qua.
+   - *Biện pháp giảm thiểu tương lai:* Áp dụng Client-side Frame Signing qua Web Crypto API hoặc WebRTC DRM token.
+2. **Mặt nạ Silicon 3D & Deepfake thời gian thực:**
+   - Các mặt nạ silicon chất lượng cao có độ sần bề mặt da chân thực có thể đánh lừa mô hình 2D Texture nếu không có cảm biến độ sâu hồng ngoại (IR camera).
+3. **Ánh sáng cực đoan:**
+   - Dưới ánh sáng vàng gắt hoặc phòng tối dưới 20 lux, mô hình có thể phân loại về `UNCERTAIN` để bảo vệ an toàn hệ thống, yêu cầu người dùng bật đèn phòng.
+
+---
+
+## 6. Hướng dẫn Kiểm tra Trạng thái Hoạt động (Health Checks)
+
+Trước khi Java Backend gửi yêu cầu xác thực, hệ thống cung cấp đầy đủ các endpoint kiểm tra trạng thái từng thành phần:
+
+### 1. Kiểm tra mô hình và tải tự động:
+```bash
+# Kiểm tra sự sẵn sàng và tính toàn vẹn SHA256 của cả 4 tệp mô hình ONNX
+python download_models.py --check-only
+
+# Tự động tải các mô hình còn thiếu nếu triển khai trên máy chủ mới
+python download_models.py
+```
+
+### 2. Kiểm tra Health của dịch vụ Liveness & PAD:
+- **Endpoint:** `GET /api/v1/liveness/health`
+- **Phản hồi mẫu khi sẵn sàng:**
+```json
+{
+  "status": "ok",
+  "version": "1.0.0",
+  "active_liveness_ready": true,
+  "passive_anti_spoofing_ready": true,
+  "anti_spoofing_enabled": true,
+  "fail_closed": true,
+  "thresholds": {
+    "yaw_center_min": 0.40,
+    "yaw_center_max": 0.60,
+    "yaw_turn_left_min": 0.65,
+    "yaw_turn_right_max": 0.35,
+    "min_motion_variance": 0.04,
+    "min_face_height_ratio": 0.20,
+    "max_face_height_ratio": 0.80,
+    "pad_threshold_live": 0.80,
+    "pad_threshold_spoof": 0.40,
+    "pad_threshold_spoof_sum": 0.60
+  },
+  "models": {
+    "yunet": {
+      "name": "YuNet (Face Detection & 5-Landmarks)",
+      "path": "models/face/face_detection_yunet_2023mar.onnx",
+      "exists": true,
+      "license": "Apache-2.0"
+    },
+    "anti_spoofing": {
+      "model_v2": {"path": "models/face/face_anti_spoofing_minifasnetv2_2.7.onnx", "exists": true, "loaded": true},
+      "model_v1se": {"path": "models/face/face_anti_spoofing_minifasnetv1se_4.0.onnx", "exists": true, "loaded": true},
+      "is_available": true,
+      "init_error": null
+    }
+  },
+  "error_message": null
+}
+```
+
+### 3. Kiểm tra Health của Face Verification & OCR:
+- **Face Health:** `GET /api/v1/face/health`
+- **OCR Health:** `GET /api/v1/health`

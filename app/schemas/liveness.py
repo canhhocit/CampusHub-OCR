@@ -71,3 +71,16 @@ class LivenessSessionStatusResponse(BaseModel):
     expires_at: float = Field(..., description="Thời gian hết hạn")
     history: List[Dict[str, Any]] = Field(default_factory=list, description="Lịch sử các bước thử thách")
     disclaimer: str = Field(..., description="Cảnh báo pháp lý và bản chất prototype thử nghiệm")
+
+
+class LivenessHealthResponse(BaseModel):
+    status: str = Field(..., description="Trạng thái dịch vụ: ok, degraded, unavailable")
+    version: str = Field(..., description="Phiên bản API")
+    active_liveness_ready: bool = Field(..., description="Mô hình YuNet phát hiện khuôn mặt và điểm mốc đã sẵn sàng")
+    passive_anti_spoofing_ready: bool = Field(..., description="Cụm mô hình MiniFASNet chống giả mạo đã sẵn sàng")
+    anti_spoofing_enabled: bool = Field(..., description="Cấu hình bật/tắt chống giả mạo thụ động")
+    fail_closed: bool = Field(..., description="Cấu hình fail-closed khi thiếu model hoặc lỗi suy luận")
+    thresholds: Dict[str, float] = Field(..., description="Các ngưỡng phán quyết phân loại và cử động")
+    models: Dict[str, Any] = Field(..., description="Chi tiết trạng thái từng tệp mô hình ONNX")
+    error_message: Optional[str] = Field(None, description="Chi tiết lỗi nếu dịch vụ chưa sẵn sàng")
+

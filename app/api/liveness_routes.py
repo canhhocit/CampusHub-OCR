@@ -8,11 +8,19 @@ from app.schemas.liveness import (
     LivenessSessionCreateResponse,
     LivenessStepVerifyResponse,
     LivenessSessionStatusResponse,
+    LivenessHealthResponse,
 )
 from app.services.image_processor import ImageProcessor, ImageValidationError
 from app.services.liveness_service import get_liveness_service
 
 liveness_router = APIRouter()
+
+
+@liveness_router.get("/health", response_model=LivenessHealthResponse)
+def liveness_health_check():
+    """Kiểm tra trạng thái sẵn sàng của mô hình và dịch vụ kiểm tra thực thể sống & chống giả mạo."""
+    service = get_liveness_service()
+    return service.get_health_status()
 
 
 @liveness_router.post("/session/create", response_model=LivenessSessionCreateResponse)

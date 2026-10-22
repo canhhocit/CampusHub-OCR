@@ -29,16 +29,9 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 # Sao chép toàn bộ mã nguồn
 COPY --chown=user:user . .
 
-# Đảm bảo 2 tệp mô hình ONNX luôn có sẵn trong image Docker
+# Đảm bảo toàn bộ 4 tệp mô hình ONNX luôn có sẵn và kiểm tra tính toàn vẹn trong image Docker
 RUN mkdir -p models/face && \
-    if [ ! -s models/face/face_detection_yunet_2023mar.onnx ]; then \
-        echo "Downloading YuNet ONNX model..." && \
-        curl -fsSL -o models/face/face_detection_yunet_2023mar.onnx https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx; \
-    fi && \
-    if [ ! -s models/face/face_recognition_sface_2021dec.onnx ]; then \
-        echo "Downloading SFace ONNX model..." && \
-        curl -fsSL -o models/face/face_recognition_sface_2021dec.onnx https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx; \
-    fi
+    python download_models.py
 
 # Khai báo cổng
 EXPOSE 7860 8000 8001 10000

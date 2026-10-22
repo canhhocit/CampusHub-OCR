@@ -21,39 +21,56 @@ Hệ thống dịch vụ độc lập phát triển, thử nghiệm và đánh g
 
 ```
 CampusHub-OCR/
-├── .gitignore                      # Loại trừ .venv, __pycache__, ảnh upload tạm thời
+├── .gitignore                      # Loại trừ .venv, __pycache__, ảnh upload tạm thời, trọng số ONNX
 ├── requirements.txt                # Danh sách thư viện và phiên bản chuẩn hóa
 ├── README.md                       # Tài liệu hướng dẫn cài đặt và vận hành
-├── evaluate.py                     # Công cụ benchmark đo lường CER, Exact-Match và độ trễ
+├── download_models.py              # Script tự động tải, kiểm tra SHA256 và smoke test 4 model ONNX
+├── evaluate.py                     # Công cụ benchmark OCR (CER, Exact-Match, Latency)
+├── evaluate_face.py                # Công cụ benchmark So khớp khuôn mặt 1:1 (FAR, FRR)
+├── evaluate_liveness_pad.py        # Công cụ benchmark Liveness & Chống giả mạo PAD (ISO/IEC 30107-3)
+├── Dockerfile                      # Khởi tạo container và tải tự động 4 model ONNX
+├── docs/
+│   └── liveness_evaluation_protocol.md # Giao thức kiểm thử thực nghiệm và ma trận tấn công PAD
+├── models/
+│   └── face/                       # Thư mục lưu 4 model ONNX (tải qua python download_models.py)
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                     # FastAPI app, static mount, middleware và CORS
-│   ├── config.py                   # Cấu hình giới hạn file, kích thước, cổng và bảo mật
+│   ├── config.py                   # Cấu hình ngưỡng OCR, Face Match, Liveness và PAD
 │   ├── api/
 │   │   ├── __init__.py
-│   │   └── routes.py               # Endpoints: /api/v1/health, /api/v1/ocr, /
+│   │   ├── routes.py               # Endpoints: /api/v1/health, /api/v1/ocr, /
+│   │   ├── face_routes.py          # Endpoints: /api/v1/face/verify, /api/v1/face/health
+│   │   └── liveness_routes.py      # Endpoints: /api/v1/liveness/session/*, /api/v1/liveness/health
 │   ├── schemas/
 │   │   ├── __init__.py
-│   │   └── ocr.py                  # Pydantic schemas (OCRResponse, ExtractedField, RawDetection)
+│   │   ├── ocr.py                  # Pydantic schemas OCR
+│   │   ├── face.py                 # Pydantic schemas Face Verification
+│   │   └── liveness.py             # Pydantic schemas Active Liveness & PAD
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── image_processor.py      # Kiểm tra định dạng (Magic bytes), kích thước và tiền xử lý
 │   │   ├── ocr_engine.py           # Bộ suy luận PaddleOCR & MockOCREngine phục vụ test
-│   │   └── cccd_extractor.py       # Trích xuất trường dữ liệu CCCD có cấu trúc (mặt trước / sau)
+│   │   ├── cccd_extractor.py       # Trích xuất trường dữ liệu CCCD có cấu trúc (mặt trước / sau)
+│   │   ├── face_verifier.py        # Bộ trích xuất và so khớp vector khuôn mặt (YuNet + SFace)
+│   │   ├── anti_spoofing_service.py # Dịch vụ Passive PAD (MiniFASNet V2 & V1SE đa tỷ lệ)
+│   │   └── liveness_service.py     # Quản lý phiên và thử thách cử động (Active Challenge + PAD)
 │   ├── static/
 │   │   ├── css/style.css           # Giao diện kiểm thử tối giản, trực quan
-│   │   └── js/app.js               # Logic upload, preview, gọi API và hiển thị kết quả
+│   │   └── js/app.js               # Logic upload CCCD, webcam selfie, liveness & PAD
 │   └── templates/
-│       └── index.html              # Màn hình thử nghiệm OCR đơn trang
+│       └── index.html              # Màn hình thử nghiệm tích hợp đơn trang
 └── tests/
     ├── __init__.py
     ├── conftest.py                 # Cấu hình Pytest, TestClient và mock fixtures
-    ├── test_api.py                 # Kiểm thử các endpoint API
+    ├── test_api.py                 # Kiểm thử các endpoint OCR API
     ├── test_validation.py          # Kiểm thử ràng buộc hình ảnh, kích thước, file hỏng
     ├── test_extraction.py          # Kiểm thử logic phân tích trường CCCD
     ├── test_evaluation.py          # Kiểm thử thuật toán CER và runner benchmark
-    └── fixtures/
-        └── ground_truth_sample.json # Bộ dữ liệu ground-truth giả lập mẫu (synthetic)
+    ├── test_face.py                # Kiểm thử so khớp khuôn mặt 1:1 và phân tích chất lượng
+    ├── test_liveness.py            # Kiểm thử active challenges và face framing validation
+    ├── test_anti_spoofing.py       # Kiểm thử chuyên sâu passive anti-spoofing và fail-closed
+    └── test_real_models_smoke.py   # Kiểm thử smoke test tải model ONNX thật và inference CPU
 ```
 
 ---
@@ -265,18 +282,25 @@ Dự án tích hợp một module PoC độc lập phục vụ đối sánh sinh
   - Bản quyền: **Apache-2.0**
 - **Thư mục lưu trữ**: `models/face/` (đã được cấu hình trong `.gitignore` để không commit weights nhị phân lên repository).
 
-### 8.2. Hướng dẫn Cài đặt trên Windows (PowerShell Setup)
-Chạy các lệnh PowerShell sau để chuẩn bị thư mục và tải mô hình ONNX chính thức:
+### 8.2. Hướng dẫn Cài đặt Mô hình (Model Installation)
 
+Để cài đặt tự động toàn bộ 4 mô hình ONNX với việc kiểm tra tính toàn vẹn mã băm SHA256 và chạy thử nghiệm (smoke test) ngay trên CPU:
+
+```bash
+# 1. Tự động tải và xác thực toàn bộ 4 mô hình ONNX (Windows / Linux / macOS)
+python download_models.py
+
+# 2. Hoặc chỉ kiểm tra sự toàn vẹn của các file mô hình hiện có mà không tải lại
+python download_models.py --check-only
+```
+
+*Tùy chọn tải thủ công trên PowerShell nếu không dùng script:*
 ```powershell
-# 1. Tạo thư mục chứa mô hình nếu chưa có
 New-Item -ItemType Directory -Force -Path "models/face"
-
-# 2. Tải YuNet Face Detector (~230 KB)
 Invoke-WebRequest -Uri "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx" -OutFile "models/face/face_detection_yunet_2023mar.onnx"
-
-# 3. Tải SFace Face Recognizer (~37 MB)
 Invoke-WebRequest -Uri "https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx" -OutFile "models/face/face_recognition_sface_2021dec.onnx"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/QingHeYang/Silent-Face-Anti-Spoofing-onnx/master/onnx/2.7_80x80_MiniFASNetV2.onnx" -OutFile "models/face/face_anti_spoofing_minifasnetv2_2.7.onnx"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/QingHeYang/Silent-Face-Anti-Spoofing-onnx/master/onnx/4_0_0_80x80_MiniFASNetV1SE.onnx" -OutFile "models/face/face_anti_spoofing_minifasnetv1se_4.0.onnx"
 ```
 
 ### 8.3. Kiểm tra Trạng thái Hoạt động (Preflight / Health Check)
@@ -311,7 +335,7 @@ Dự án tích hợp cơ chế phát hiện thực thể kết hợp 2 lớp đ�
 
 ### 9.1. Kiến trúc Hai Lớp (Two-Tier Defense)
 1. **Lớp Chủ động (Active Pose Challenges)**:
-   - Sinh phiên ngẫu nhiên (`/api/v1/liveness/session/create`) yêu cầu quay đầu trái / phải (`TURN_LEFT`, `TURN_RIGHT`) hoặc chớp mắt.
+   - Sinh phiên ngẫu nhiên (`/api/v1/liveness/session/create`) yêu cầu quay đầu trái / phải (`TURN_HEAD_LEFT`, `TURN_HEAD_RIGHT`) hoặc nhìn thẳng.
    - Sử dụng YuNet trích xuất 5 điểm mốc đặc trưng (Landmarks) để tính toán góc lệch Yaw ($\Delta yaw \ge 12^\circ$) và kiểm tra tỷ lệ khung hình khuôn mặt nằm gọn trong hình oval hướng dẫn.
 2. **Lớp Thụ động (Passive PAD - Presentation Attack Detection)**:
    - Ngăn chặn triệt để tấn công phát lại video (video replay attack), in ảnh màu (print attack), và chiếu qua màn hình thiết bị (screen replay).
@@ -333,25 +357,53 @@ Chạy công cụ benchmark đo lường APCER (Attack Presentation Classificati
 python evaluate_liveness_pad.py
 ```
 
+### 9.4. Kiểm tra Sức khỏe Dịch vụ Liveness & PAD
+Kiểm tra trạng thái sẵn sàng qua endpoint `GET /api/v1/liveness/health`:
+- Trả về `status="ok"` khi cả YuNet và 2 model MiniFASNet đã nạp thành công.
+- Trả về `status="unavailable"` kèm thông điệp lỗi cụ thể khi thiếu file trọng số hoặc fail-closed được kích hoạt.
+
 ---
 
-## 10. Nguyên tắc Bảo mật & Giới hạn Phạm vi
+## 10. Sẵn sàng Tích hợp với Java Backend (Spring Boot Readiness)
+
+Hệ thống đã chuẩn hóa toàn bộ các giao diện lập trình ứng dụng (RESTful API) để Java Backend (Spring Boot) tích hợp trực tiếp:
+
+| STT | Phương thức | Đường dẫn API | Mục đích tích hợp | Ghi chú & Mã phản hồi |
+|:---:|:---:|:---|:---|:---|
+| 1 | `GET` | `/api/v1/health` | Kiểm tra trạng thái OCR Engine (PaddleOCR) | `200 OK` (status: "ok") |
+| 2 | `POST` | `/api/v1/ocr` | Trích xuất thông tin CCCD từ ảnh chụp | `200 OK` (Multipart form-data: `file`) |
+| 3 | `GET` | `/api/v1/face/health` | Kiểm tra mô hình So khớp khuôn mặt (YuNet, SFace) | `200 OK` (models_loaded: true) / `503` nếu thiếu model |
+| 4 | `POST` | `/api/v1/face/verify` | Đối sánh 1:1 giữa chân dung CCCD và selfie webcam | `200 OK` (form: `card_image`, `live_image`, `threshold`) |
+| 5 | `GET` | `/api/v1/liveness/health` | Kiểm tra Liveness và Passive PAD | `200 OK` (active_liveness_ready: true, pad_ready: true) |
+| 6 | `POST` | `/api/v1/liveness/session/create` | Khởi tạo phiên thử thách liveness ngẫu nhiên | `200 OK` (trả về `session_id`, `challenge`) |
+| 7 | `GET` | `/api/v1/liveness/session/{id}` | Lấy trạng thái phiên liveness hiện tại | `200 OK` / `404 Not Found` nếu hết hạn |
+| 8 | `POST` | `/api/v1/liveness/session/{id}/verify-step` | Xác thực chuỗi 3 khung hình theo thử thách | `200 OK` (Multipart form-data: `frames`) |
+
+### Nguyên tắc Vận hành Đảm bảo An toàn:
+- **Zero Persistence:** Không có ảnh nào lưu lại đĩa cứng máy chủ.
+- **Fail-Closed:** Thiếu file mô hình hoặc lỗi mạng/nhiễu ảnh sẽ từ chối xác thực một cách an toàn.
+- **Không tự cấp quyền:** Kết quả OCR và Liveness trả về điểm số phân tích và trạng thái kỹ thuật; quyết định cấp quyền tài khoản sinh viên hoàn toàn do nghiệp vụ Spring Boot Backend quản lý.
+
+---
+
+## 11. Nguyên tắc Bảo mật & Giới hạn Phạm vi
 
 1. **Bảo mật dữ liệu (Data Privacy)**:
-   - Dịch vụ chỉ mở trên `127.0.0.1` (localhost).
+   - Dịch vụ chỉ mở trên `127.0.0.1` (localhost) hoặc mạng nội bộ được cấu hình tường lửa.
    - Hình ảnh tải lên được đọc và xử lý hoàn toàn trong bộ nhớ RAM, **không ghi tệp vĩnh viễn** xuống đĩa máy chủ.
    - Không log base64 hình ảnh, không log số CCCD, không log vector embedding khuôn mặt hoặc thông tin cá nhân ra console.
    - Không gọi ra bất kỳ dịch vụ đám mây bên thứ ba nào.
 
 2. **Giới hạn phạm vi (Explicit Scope Boundaries)**:
    - Dự án **CHƯA** đọc mã QR mặt trước thẻ CCCD.
-   - Chưa tích hợp vào luồng xác thực danh tính sinh viên của CampusHub Backend/Frontend.
    - Điểm so khớp sinh trắc học khuôn mặt đạt ngưỡng **không chứng minh** thẻ CCCD là thẻ thật và không thay thế việc kiểm tra pháp lý.
+   - PAD không thể bảo đảm 100% trước Virtual Camera injection ở tầng hệ điều hành nếu không có giải pháp ký số khung hình từ WebRTC client.
 
 ---
 
-## 11. Bản quyền & Tác giả
+## 12. Bản quyền & Tác giả
 
 - **Dự án**: CampusHub-OCR (Dự án nghiên cứu & thử nghiệm OCR và Xác minh khuôn mặt độc lập)
 - **Tác giả / Phát triển**: Phạm Hữu Cảnh
+
 
