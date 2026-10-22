@@ -27,6 +27,13 @@ class LivenessSessionCreateResponse(BaseModel):
     challenge: ChallengeInfo = Field(..., description="Thông tin thử thách hiện tại cần thực hiện")
 
 
+class AntiSpoofingOutcome(str, Enum):
+    LIVE = "LIVE"
+    SPOOF = "SPOOF"
+    UNCERTAIN = "UNCERTAIN"
+    ERROR = "ERROR"
+
+
 class FrameMetric(BaseModel):
     frame_index: int
     face_detected: bool
@@ -36,6 +43,8 @@ class FrameMetric(BaseModel):
     motion_delta: Optional[float] = None
     framing_valid: Optional[bool] = None
     framing_reason: Optional[str] = None
+    anti_spoofing_outcome: Optional[str] = None
+    anti_spoofing_score: Optional[float] = None
 
 
 class LivenessStepVerifyResponse(BaseModel):
@@ -49,6 +58,7 @@ class LivenessStepVerifyResponse(BaseModel):
     reason_code: Optional[str] = Field(None, description="Mã nguyên nhân nếu không đạt hoặc đạt bước")
     message: str = Field(..., description="Thông báo kết quả chi tiết bằng tiếng Việt")
     metrics: Optional[Dict[str, Any]] = Field(None, description="Thông số kỹ thuật phân tích chuyển động")
+    anti_spoofing_outcome: Optional[str] = Field(None, description="Kết quả phân tích chống giả mạo tĩnh: LIVE, SPOOF, UNCERTAIN, ERROR")
 
 
 class LivenessSessionStatusResponse(BaseModel):

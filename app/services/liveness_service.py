@@ -15,6 +15,7 @@ from app.schemas.liveness import (
     LivenessSessionCreateResponse,
     LivenessStepVerifyResponse,
     LivenessSessionStatusResponse,
+    AntiSpoofingOutcome,
 )
 
 logger = logging.getLogger(__name__)
@@ -324,8 +325,13 @@ class MockLivenessDetector(BaseLivenessDetector):
 class LivenessService:
     """Core Liveness Detection service managing active sessions and frame verification."""
 
-    def __init__(self, detector: Optional[BaseLivenessDetector] = None):
+    def __init__(
+        self,
+        detector: Optional[BaseLivenessDetector] = None,
+        anti_spoofing_detector: Optional[Any] = None,
+    ):
         self._detector: Optional[BaseLivenessDetector] = detector
+        self._anti_spoofing_detector = anti_spoofing_detector
         self._sessions: Dict[str, LivenessSessionState] = {}
         self._lock: threading.Lock = threading.Lock()
 
@@ -334,9 +340,19 @@ class LivenessService:
             self._detector = YuNetLivenessDetector()
         return self._detector
 
+    def _get_anti_spoofing_detector(self):
+        if self._anti_spoofing_detector is None:
+            from app.services.anti_spoofing_service import get_anti_spoofing_detector
+            self._anti_spoofing_detector = get_anti_spoofing_detector()
+        return self._anti_spoofing_detector
+
     def set_detector(self, detector: Optional[BaseLivenessDetector]):
         """Injects a custom or mock detector for testing."""
         self._detector = detector
+
+    def set_anti_spoofing_detector(self, detector: Optional[Any]):
+        """Injects a custom or mock anti-spoofing detector for testing."""
+        self._anti_spoofing_detector = detector
 
     def _cleanup_expired_sessions(self):
         """Purges expired sessions to ensure memory remains bounded."""
@@ -580,6 +596,44 @@ class LivenessService:
                         metrics=framing_result.details,
                     )
 
+                # Dedicated Passive Face Anti-Spoofing (PAD) check
+                if settings.ANTI_SPOOFING_ENABLED:
+                    pad_detector = self._get_anti_spoofing_detector()
+                    pad_result = pad_detector.predict(frame, (box[0], box[1], bw, bh))
+
+                    if pad_result.outcome == AntiSpoofingOutcome.ERROR:
+                        if settings.ANTI_SPOOFING_FAIL_CLOSED:
+                            return self._handle_step_failure(
+                                session,
+                                "ANTI_SPOOFING_ERROR",
+                                f"Khung hình thứ {idx + 1}: {pad_result.error_message or 'Lỗi suy luận kiểm tra chống giả mạo'}. Hệ thống từ chối xác thực vì an toàn.",
+                                metrics=pad_result.details,
+                                anti_spoofing_outcome=pad_result.outcome.value,
+                            )
+
+                    elif pad_result.outcome == AntiSpoofingOutcome.SPOOF:
+                        spoof_type = (
+                            "màn hình thiết bị khác (video replay)"
+                            if pad_result.score_screen >= pad_result.score_paper
+                            else "ảnh in trên giấy"
+                        )
+                        return self._handle_step_failure(
+                            session,
+                            "SPOOF_DETECTED",
+                            f"Phát hiện dấu hiệu giả mạo từ {spoof_type} trong khung hình thứ {idx + 1} (Độ tin cậy: {pad_result.confidence * 100:.1f}%). Vui lòng sử dụng khuôn mặt thật trực tiếp trước camera.",
+                            metrics=pad_result.details,
+                            anti_spoofing_outcome=pad_result.outcome.value,
+                        )
+
+                    elif pad_result.outcome == AntiSpoofingOutcome.UNCERTAIN:
+                        return self._handle_step_failure(
+                            session,
+                            "UNCERTAIN_LIVENESS",
+                            f"Không thể xác định chắc chắn thực thể sống trong khung hình thứ {idx + 1}. Vui lòng tránh ánh sáng chói, bóng phản chiếu màn hình và thử lại.",
+                            metrics=pad_result.details,
+                            anti_spoofing_outcome=pad_result.outcome.value,
+                        )
+
                 yaw, pitch = self._compute_pose_metrics(landmarks)
                 yaw_ratios.append(yaw)
                 pitch_ratios.append(pitch)
@@ -706,6 +760,7 @@ class LivenessService:
                     reason_code="LIVENESS_VERIFIED",
                     message="Xác minh thực thể sống thành công! Người dùng đã hoàn thành toàn bộ chuỗi thử thách.",
                     metrics=metrics,
+                    anti_spoofing_outcome=AntiSpoofingOutcome.LIVE.value,
                 )
             else:
                 next_challenge = session.get_current_challenge()
@@ -720,6 +775,7 @@ class LivenessService:
                     reason_code="STEP_COMPLETED",
                     message=f"Hoàn thành bước {current_step_num}/{session.total_steps}. Vui lòng thực hiện bước tiếp theo.",
                     metrics=metrics,
+                    anti_spoofing_outcome=AntiSpoofingOutcome.LIVE.value,
                 )
 
     def _handle_step_failure(
@@ -728,6 +784,7 @@ class LivenessService:
         reason_code: str,
         message: str,
         metrics: Optional[Dict[str, Any]] = None,
+        anti_spoofing_outcome: Optional[str] = None,
     ) -> LivenessStepVerifyResponse:
         """Records failure attempt and determines whether session should transition to FAILED."""
         session.step_attempts += 1
@@ -742,6 +799,7 @@ class LivenessService:
             "metrics": metrics or {},
             "attempt": session.step_attempts,
             "timestamp": time.time(),
+            "anti_spoofing_outcome": anti_spoofing_outcome,
         })
 
         if session.step_attempts >= settings.LIVENESS_MAX_STEP_ATTEMPTS:
@@ -757,6 +815,7 @@ class LivenessService:
                 reason_code="MAX_ATTEMPTS_EXCEEDED",
                 message=f"Đã vượt quá số lần thử tối đa ({settings.LIVENESS_MAX_STEP_ATTEMPTS} lần) cho bước này. Phiên bị hủy.",
                 metrics=metrics,
+                anti_spoofing_outcome=anti_spoofing_outcome,
             )
 
         return LivenessStepVerifyResponse(
@@ -770,6 +829,7 @@ class LivenessService:
             reason_code=reason_code,
             message=f"{message} (Lần thử {session.step_attempts}/{settings.LIVENESS_MAX_STEP_ATTEMPTS}).",
             metrics=metrics,
+            anti_spoofing_outcome=anti_spoofing_outcome,
         )
 
 

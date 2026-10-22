@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from app.config import settings
-from app.schemas.liveness import ChallengeAction
+from app.schemas.liveness import ChallengeAction, AntiSpoofingOutcome
 from app.services.liveness_service import (
     LivenessService,
     LivenessSessionState,
@@ -16,6 +16,7 @@ from app.services.liveness_service import (
     get_liveness_service,
     set_liveness_service,
 )
+from app.services.anti_spoofing_service import MockAntiSpoofingDetector
 
 
 @pytest.fixture
@@ -23,7 +24,8 @@ def mock_liveness():
     """Provides an isolated LivenessService with a Mock detector for deterministic testing."""
     original_service = get_liveness_service()
     mock_detector = MockLivenessDetector()
-    service = LivenessService(detector=mock_detector)
+    mock_anti_spoofing = MockAntiSpoofingDetector(default_outcome=AntiSpoofingOutcome.LIVE)
+    service = LivenessService(detector=mock_detector, anti_spoofing_detector=mock_anti_spoofing)
     set_liveness_service(service)
     yield service, mock_detector
     set_liveness_service(original_service)

@@ -82,6 +82,21 @@ class Settings(BaseModel):
     LIVENESS_MAX_EYE_Y_RATIO: float = float(os.getenv("LIVENESS_MAX_EYE_Y_RATIO", "0.58"))
     LIVENESS_MAX_MOUTH_Y_RATIO: float = float(os.getenv("LIVENESS_MAX_MOUTH_Y_RATIO", "0.88"))
 
+    # Passive Face Anti-Spoofing settings (MiniFASNet)
+    ANTI_SPOOFING_ENABLED: bool = os.getenv("ANTI_SPOOFING_ENABLED", "true").lower() == "true"
+    ANTI_SPOOFING_MODEL_PATH_V2: str = os.getenv(
+        "ANTI_SPOOFING_MODEL_PATH_V2",
+        "models/face/face_anti_spoofing_minifasnetv2_2.7.onnx",
+    )
+    ANTI_SPOOFING_MODEL_PATH_V1SE: str = os.getenv(
+        "ANTI_SPOOFING_MODEL_PATH_V1SE",
+        "models/face/face_anti_spoofing_minifasnetv1se_4.0.onnx",
+    )
+    ANTI_SPOOFING_THRESHOLD_LIVE: float = float(os.getenv("ANTI_SPOOFING_THRESHOLD_LIVE", "0.80"))
+    ANTI_SPOOFING_THRESHOLD_SPOOF: float = float(os.getenv("ANTI_SPOOFING_THRESHOLD_SPOOF", "0.40"))
+    ANTI_SPOOFING_THRESHOLD_SPOOF_SUM: float = float(os.getenv("ANTI_SPOOFING_THRESHOLD_SPOOF_SUM", "0.60"))
+    ANTI_SPOOFING_FAIL_CLOSED: bool = os.getenv("ANTI_SPOOFING_FAIL_CLOSED", "true").lower() == "true"
+
     LIVENESS_DISCLAIMER: str = (
         "Kết quả kiểm tra thực thể sống V1 (Liveness Detection) dựa trên thách thức chủ động (Active Challenge). "
         "Đây là phiên bản thử nghiệm thuật toán (research prototype), không thay thế chứng thực sinh trắc học chuẩn quốc tế "

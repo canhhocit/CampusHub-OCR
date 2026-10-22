@@ -305,7 +305,37 @@ Kiểm tra trạng thái nạp mô hình thực tế qua endpoint `/api/v1/face/
 
 ---
 
-## 9. Nguyên tắc Bảo mật & Giới hạn Phạm vi
+## 9. Module Chống Giả Mạo & Kiểm Tra Thực Thể (Liveness & Passive Anti-Spoofing / PAD)
+
+Dự án tích hợp cơ chế phát hiện thực thể kết hợp 2 lớp độc lập (Two-Tier Liveness & Presentation Attack Detection):
+
+### 9.1. Kiến trúc Hai Lớp (Two-Tier Defense)
+1. **Lớp Chủ động (Active Pose Challenges)**:
+   - Sinh phiên ngẫu nhiên (`/api/v1/liveness/session/create`) yêu cầu quay đầu trái / phải (`TURN_LEFT`, `TURN_RIGHT`) hoặc chớp mắt.
+   - Sử dụng YuNet trích xuất 5 điểm mốc đặc trưng (Landmarks) để tính toán góc lệch Yaw ($\Delta yaw \ge 12^\circ$) và kiểm tra tỷ lệ khung hình khuôn mặt nằm gọn trong hình oval hướng dẫn.
+2. **Lớp Thụ động (Passive PAD - Presentation Attack Detection)**:
+   - Ngăn chặn triệt để tấn công phát lại video (video replay attack), in ảnh màu (print attack), và chiếu qua màn hình thiết bị (screen replay).
+   - Tích hợp cụm mô hình **MiniFASNet (V2 & V1SE)** đa tỷ lệ (Multi-scale crop: scale 2.7 và scale 4.0 context).
+   - Bản quyền mô hình: **Apache-2.0** ([minivision-ai/Silent-Face-Anti-Spoofing](https://github.com/minivision-ai/Silent-Face-Anti-Spoofing)).
+   - Trọng số ONNX lưu trữ tại:
+     - `models/face/face_anti_spoofing_minifasnetv2_2.7.onnx` (~1.74 MB)
+     - `models/face/face_anti_spoofing_minifasnetv1se_4.0.onnx` (~1.74 MB)
+   - Chạy trực tiếp qua bộ suy luận **OpenCV DNN** trên CPU (~2-10ms / frame), không yêu cầu GPU hay runtime cồng kềnh.
+
+### 9.2. Nguyên tắc An toàn & Fail-Closed
+- Kết quả phân loại trả về tường minh: `LIVE`, `SPOOF`, `UNCERTAIN`, hoặc `ERROR`.
+- Thiết lập cơ chế **Fail-Closed**: Khi thiếu file mô hình hoặc lỗi suy luận, hệ thống từ chối xác thực với mã lỗi `ANTI_SPOOFING_ERROR`, tuyệt đối không âm thầm cho qua (`fail-open`).
+- Quay đầu thành công **không thể** vượt qua nếu bộ phát hiện thụ động đánh giá là `SPOOF`.
+
+### 9.3. Benchmark Đánh giá PAD (ISO/IEC 30107-3)
+Chạy công cụ benchmark đo lường APCER (Attack Presentation Classification Error Rate) và BPCER (Bona Fide Presentation Classification Error Rate):
+```bash
+python evaluate_liveness_pad.py
+```
+
+---
+
+## 10. Nguyên tắc Bảo mật & Giới hạn Phạm vi
 
 1. **Bảo mật dữ liệu (Data Privacy)**:
    - Dịch vụ chỉ mở trên `127.0.0.1` (localhost).
@@ -314,14 +344,13 @@ Kiểm tra trạng thái nạp mô hình thực tế qua endpoint `/api/v1/face/
    - Không gọi ra bất kỳ dịch vụ đám mây bên thứ ba nào.
 
 2. **Giới hạn phạm vi (Explicit Scope Boundaries)**:
-   - Dự án **CHƯA** bao gồm kiểm tra liveness hoặc chống giả mạo khuôn mặt (anti-spoofing).
    - Dự án **CHƯA** đọc mã QR mặt trước thẻ CCCD.
    - Chưa tích hợp vào luồng xác thực danh tính sinh viên của CampusHub Backend/Frontend.
    - Điểm so khớp sinh trắc học khuôn mặt đạt ngưỡng **không chứng minh** thẻ CCCD là thẻ thật và không thay thế việc kiểm tra pháp lý.
 
 ---
 
-## 10. Bản quyền & Tác giả
+## 11. Bản quyền & Tác giả
 
 - **Dự án**: CampusHub-OCR (Dự án nghiên cứu & thử nghiệm OCR và Xác minh khuôn mặt độc lập)
 - **Tác giả / Phát triển**: Phạm Hữu Cảnh

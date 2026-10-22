@@ -907,6 +907,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const livenessDecisionBadge = document.getElementById("livenessDecisionBadge");
     const livenessDecisionSubtitle = document.getElementById("livenessDecisionSubtitle");
     const resLiveMotionDelta = document.getElementById("resLiveMotionDelta");
+    const resLiveAntiSpoof = document.getElementById("resLiveAntiSpoof");
     const resLiveCompletedSteps = document.getElementById("resLiveCompletedSteps");
     const resLiveDuration = document.getElementById("resLiveDuration");
 
@@ -1181,6 +1182,11 @@ document.addEventListener("DOMContentLoaded", () => {
             if (result.reason_code === "FACE_OUT_OF_GUIDE" || result.reason_code === "FACE_PARTIALLY_VISIBLE") {
                 if (faceGuideOval) faceGuideOval.classList.add("framing-warning");
                 if (ovalHintText) ovalHintText.textContent = result.message;
+            } else if (result.reason_code === "SPOOF_DETECTED") {
+                if (faceGuideOval) faceGuideOval.classList.add("framing-warning");
+                if (ovalHintText) ovalHintText.textContent = "Cảnh báo: Phát hiện màn hình/ảnh in giả mạo!";
+            } else if (result.reason_code === "UNCERTAIN_LIVENESS") {
+                if (ovalHintText) ovalHintText.textContent = "Không rõ thực thể sống (tránh phản chiếu màn hình)";
             }
             if (result.status === "FAILED") {
                 showLivenessFailure(result);
@@ -1206,6 +1212,10 @@ document.addEventListener("DOMContentLoaded", () => {
         resLiveDuration.textContent = `${durationSec}s`;
         resLiveCompletedSteps.textContent = `${result.total_steps}/${result.total_steps}`;
 
+        if (resLiveAntiSpoof) {
+            resLiveAntiSpoof.textContent = result.anti_spoofing_outcome || "LIVE";
+        }
+
         if (result.metrics && result.metrics.motion_delta !== undefined) {
             resLiveMotionDelta.textContent = Number(result.metrics.motion_delta).toFixed(4);
         } else {
@@ -1225,6 +1235,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const durationSec = Math.round((Date.now() - livenessSessionStartTime) / 1000);
         resLiveDuration.textContent = `${durationSec}s`;
         resLiveCompletedSteps.textContent = `${result.current_step - 1}/${result.total_steps}`;
+
+        if (resLiveAntiSpoof) {
+            resLiveAntiSpoof.textContent = result.anti_spoofing_outcome || "SPOOF";
+        }
+
         if (result.metrics && result.metrics.motion_delta !== undefined) {
             resLiveMotionDelta.textContent = Number(result.metrics.motion_delta).toFixed(4);
         } else {

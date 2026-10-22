@@ -20,6 +20,14 @@ from app.services.liveness_service import (
     get_liveness_service,
     set_liveness_service,
 )
+from app.services.anti_spoofing_service import (
+    AntiSpoofingResult,
+    BaseAntiSpoofingDetector,
+    MiniFASNetAntiSpoofingDetector,
+    MockAntiSpoofingDetector,
+    get_anti_spoofing_detector,
+    set_anti_spoofing_detector,
+)
 
 __all__ = [
     "ImageProcessor",
@@ -41,6 +49,14 @@ __all__ = [
     "BaseLivenessDetector",
     "YuNetLivenessDetector",
     "MockLivenessDetector",
+    "FaceFramingValidator",
+    "FramingValidationResult",
     "get_liveness_service",
     "set_liveness_service",
+    "AntiSpoofingResult",
+    "BaseAntiSpoofingDetector",
+    "MiniFASNetAntiSpoofingDetector",
+    "MockAntiSpoofingDetector",
+    "get_anti_spoofing_detector",
+    "set_anti_spoofing_detector",
 ]
