@@ -311,8 +311,17 @@ def test_liveness_step_genuine_live_and_valid_head_turn_passes(client):
 # 3. Real MiniFASNet ONNX Model Tests (Non-mocked, Actual Inference)
 # =========================================================================
 
+def _require_minifasnet_models() -> None:
+    if not (
+        os.path.exists(settings.ANTI_SPOOFING_MODEL_PATH_V2)
+        and os.path.exists(settings.ANTI_SPOOFING_MODEL_PATH_V1SE)
+    ):
+        pytest.skip("MiniFASNet ONNX model weights are not present (gitignored)")
+
+
 def test_real_minifasnet_initialization():
     """Real MiniFASNet detector loads both V2 and V1SE ONNX models successfully."""
+    _require_minifasnet_models()
     detector = MiniFASNetAntiSpoofingDetector()
     assert detector.is_available is True
     assert detector._net_v2 is not None
@@ -343,6 +352,7 @@ def test_real_minifasnet_inference_execution_and_speed():
     Executes real inference through both ONNX models on CPU.
     Verifies that probabilities sum to 1.0 and latency is well under 50ms per frame.
     """
+    _require_minifasnet_models()
     detector = MiniFASNetAntiSpoofingDetector()
     assert detector.is_available is True
 
