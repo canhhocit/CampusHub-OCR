@@ -70,3 +70,29 @@ def test_ocr_endpoint_with_mock_engine(client, mock_ocr):
     assert data["fields"]["full_name"]["value"] == "LÊ THỊ HOA"
     assert len(data["raw_detections"]) == 4
     assert data["disclaimer"] != ""
+
+
+def test_internal_api_key_enforced_when_configured(client, monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "OCR_API_KEY", "test-internal-key-123")
+
+    # Health endpoint remains public
+    health_res = client.get("/api/v1/health")
+    assert health_res.status_code == 200
+
+    # Protected endpoint rejects missing/wrong key
+    unauth_res = client.post("/api/v1/liveness/session/create")
+    assert unauth_res.status_code == 401
+
+    wrong_res = client.post(
+        "/api/v1/liveness/session/create",
+        headers={"X-Internal-Api-Key": "wrong-key"},
+    )
+    assert wrong_res.status_code == 401
+
+    # Valid key succeeds
+    ok_res = client.post(
+        "/api/v1/liveness/session/create",
+        headers={"X-Internal-Api-Key": "test-internal-key-123"},
+    )
+    assert ok_res.status_code == 200

@@ -1,3 +1,4 @@
+import hmac
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -16,19 +17,37 @@ app = FastAPI(
     redoc_url=None,
 )
 
-# Restrictive CORS: Localhost only
+# Restrictive CORS configurable via OCR_ALLOWED_ORIGINS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8001",
-        "http://127.0.0.1:8001",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+
+PUBLIC_HEALTH_PATHS = {
+    "/api/v1/health",
+    "/api/v1/face/health",
+    "/api/v1/liveness/health",
+}
+
+@app.middleware("http")
+async def verify_internal_api_key(request: Request, call_next):
+    configured_key = settings.OCR_API_KEY.strip()
+    if (
+        configured_key
+        and request.method != "OPTIONS"
+        and request.url.path.startswith("/api/v1/")
+        and request.url.path not in PUBLIC_HEALTH_PATHS
+    ):
+        provided_key = (request.headers.get("X-Internal-Api-Key") or "").strip()
+        if not provided_key or not hmac.compare_digest(provided_key, configured_key):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Unauthorized internal service request."},
+            )
+    return await call_next(request)
 
 # Disable browser caching for static files and HTML in development
 @app.middleware("http")
